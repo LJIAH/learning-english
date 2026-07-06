@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <h1>Hello World!!</h1>
+    <hr />
+    <!-- <button>nihao</button> -->
+    <button onclick="history.pushState({}, '', '/pushState')">pushState</button>
+    <button onclick="history.replaceState({}, '', '/replaceState')">
+      replaceState
+    </button>
+    <button onclick="history.back()">back</button>
+    <button onclick="history.forward()">forward</button>
+    <button onclick="history.go(-1)">go(-1)</button>
+    <button onclick="history.go(1)">go(1)</button>
+    <button onclick="history.go(0)">go(0)</button>
+    <button onclick="window.location.hash = '#/home'">hashchange</button>
+    <hr />
+    <h3>错误上报测试</h3>
+    <button onclick="throw new Error('测试同步JS错误')">触发同步JS错误</button>
+    <button onclick="setTimeout(() => { throw new Error('测试异步JS错误'); }, 0)">触发异步JS错误</button>
+    <button onclick="Promise.reject(new Error('测试Promise未捕获错误'))">触发Promise错误</button>
+    <button onclick="undefinedFunc()">触发未定义函数错误</button>
+    <script src="./index.ts" type="module"></script>
+  </body>
+</html>

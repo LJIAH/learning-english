@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment variables (含密钥，禁止提交)
+.env
+.env.*
+
+# Prisma 生成产物（按需 prisma generate 重新生成）
+**/generated/prisma/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+
+# 本地工具数据
+.codebuddy/
+.workbuddy/

@@ -1,0 +1,21 @@
+{
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "web": "pnpm --filter @en/web dev",
+    "tracker": "pnpm --filter @en/tracker dev",
+    "server": "pnpm --filter @en/server start:dev",
+    "ai": "pnpm --filter @en/server start:dev ai",
+    "all": "concurrently \"pnpm run web\" \"pnpm run server\" \"pnpm run ai\"",
+    "minio": "cd ../minio && start.cmd",
+    "ngrok": "cd ../ngrok && start.cmd",
+    "dev": "concurrently -n minio,ngrok,app \"pnpm minio\" \"pnpm ngrok\" \"pnpm all\""
+  },
+  "dependencies": {
+    "dayjs": "^1.11.21",
+    "md5": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/md5": "^2.3.6",
+    "concurrently": "^10.0.3"
+  }
+}

@@ -1,0 +1,12 @@
+packages:
+  - "apps/*"
+  - "server"
+  - "packages/*"
+
+allowBuilds:
+  bcrypt: true
+  "@prisma/engines": true
+  esbuild: true
+  prisma: true
+  unrs-resolver: true
+  msgpackr-extract: true
