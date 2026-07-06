@@ -8,6 +8,7 @@ export const userSelect = {
   createdAt: true,
   updatedAt: true,
   lastLoginAt: true,
+  tokenVersion: true,
   wordNumber: true,
   dayNumber: true,
   bio: true,

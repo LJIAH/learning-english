@@ -1,6 +1,6 @@
 import { ref, computed } from "vue";
 import { defineStore } from "pinia";
-import type { Token, UserUpdate, WebResultUser } from "@en/common/user";
+import type { UserUpdate, WebResultUser } from "@en/common/user";
 
 export const useUserStore = defineStore(
   "user",
@@ -13,10 +13,11 @@ export const useUserStore = defineStore(
     const logout = () => {
       user.value = null;
     };
-    const getAccessToken = computed(() => user.value?.token?.accessToken);
-    const getRefreshToken = computed(() => user.value?.token?.refreshToken);
-    const updateToken = (newToken: Token) => {
-      user.value = { ...user.value, token: newToken } as WebResultUser;
+    // refreshToken 改存 httpOnly cookie，前端只持有短期 accessToken
+    const getAccessToken = computed(() => user.value?.accessToken);
+    // 刷新成功后更新 accessToken
+    const updateAccessToken = (accessToken: string) => {
+      if (user.value) user.value.accessToken = accessToken;
     };
     // 更新用户单词数量
     const updateUserWordNumber = (newWordNumber: number) => {
@@ -50,8 +51,7 @@ export const useUserStore = defineStore(
       setUser,
       logout,
       getAccessToken,
-      getRefreshToken,
-      updateToken,
+      updateAccessToken,
       updateUser,
       getUpdateUserInfo,
       updateUserWordNumber,

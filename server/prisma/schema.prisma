@@ -38,6 +38,7 @@ model User {
   createdAt       DateTime         @default(now()) // 创建时间
   updatedAt       DateTime         @updatedAt // 更新时间
   lastLoginAt     DateTime? // 最后登录时间
+  tokenVersion    Int       @default(0) // token 版本号，用于吊销/单次使用 refreshToken：登出/刷新时递增
   wordBookRecords WordBookRecord[]
   paymentRecords  PaymentRecord[]
   courseRecords   CourseRecord[]

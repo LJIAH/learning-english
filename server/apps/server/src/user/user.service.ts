@@ -2,7 +2,6 @@
 import { Injectable } from "@nestjs/common";
 import type {
   RefreshTokenPayload,
-  Token,
   UserLogin,
   UserRegister,
   UserUpdate,
@@ -14,8 +13,13 @@ import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { MinioService } from "@libs/shared/minio/minio.service";
 import { ConfigService } from "@nestjs/config";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { updateUserSelect, userSelect } from "./user.select";
+
+// refreshToken httpOnly cookie 的名称与配置
+const REFRESH_COOKIE_NAME = "refreshToken";
+const REFRESH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 天，与 refreshToken 过期时间一致
+const REFRESH_COOKIE_PATH = "/api";
 
 @Injectable()
 export class UserService {
@@ -28,8 +32,25 @@ export class UserService {
     private readonly configService: ConfigService,
   ) {}
 
+  // 将 refreshToken 写入 httpOnly cookie，避免被 XSS 读取
+  private setRefreshCookie(res: Response, refreshToken: string) {
+    const isProduction =
+      this.configService.get<string>("NODE_ENV") === "production";
+    res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "lax",
+      maxAge: REFRESH_COOKIE_MAX_AGE,
+      path: REFRESH_COOKIE_PATH,
+    });
+  }
+
+  private clearRefreshCookie(res: Response) {
+    res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+  }
+
   // 登录
-  async login(loginUserDto: UserLogin) {
+  async login(loginUserDto: UserLogin, res: Response) {
     // 1.检查手机号是否存在
     const user = await this.prisma.user.findUnique({
       where: { phone: loginUserDto.phone },
@@ -46,16 +67,23 @@ export class UserService {
       data: { lastLoginAt: new Date() },
       select: userSelect,
     });
-    // 4.生成token
+    // 4.生成token（携带 tokenVersion，用于吊销/单次使用）
+    const { tokenVersion, ...userData } = updatedUser;
     const token = this.authService.generateToken({
       userId: updatedUser.id,
       name: updatedUser.name,
       email: updatedUser.email,
+      tokenVersion,
     });
-    return this.response.success({ ...updatedUser, token });
+    // refreshToken 写入 httpOnly cookie，不下发到前端
+    this.setRefreshCookie(res, token.refreshToken);
+    return this.response.success({
+      ...userData,
+      accessToken: token.accessToken,
+    });
   }
   // 注册
-  async register(createUserDto: UserRegister) {
+  async register(createUserDto: UserRegister, res: Response) {
     // 前端已做md5，后端用bcrypt二次加密后存储
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
     const data: Prisma.UserCreateInput = {
@@ -84,39 +112,69 @@ export class UserService {
       select: userSelect,
     });
     // 4.生成token
+    const { tokenVersion, ...userData } = newUser;
     const token = this.authService.generateToken({
       userId: newUser.id,
       name: newUser.name,
       email: newUser.email,
+      tokenVersion,
     });
-
-    return this.response.success({ ...newUser, token });
+    this.setRefreshCookie(res, token.refreshToken);
+    return this.response.success({
+      ...userData,
+      accessToken: token.accessToken,
+    });
   }
   // 刷新token
-  async refreshToken(refreshTokenDto: Omit<Token, "accessToken">) {
+  async refreshToken(refreshToken: string | undefined, res: Response) {
     try {
-      // 1.检查refreshToken是否有效
-      const decoded = await this.jwtService.verifyAsync<RefreshTokenPayload>(
-        refreshTokenDto.refreshToken,
-      );
-      // 2.检查tokenType是否为refresh，防止accessToken冒充
+      // 1.refreshToken 从 httpOnly cookie 读取
+      if (!refreshToken) {
+        return this.response.error(null, "refreshToken无效");
+      }
+      // 2.检查refreshToken是否有效
+      const decoded =
+        await this.jwtService.verifyAsync<RefreshTokenPayload>(refreshToken);
+      // 3.检查tokenType是否为refresh，防止accessToken冒充
       if (!decoded || decoded.tokenType !== "refresh") {
         return this.response.error(null, "refreshToken无效");
       }
-      // 3.查询用户是否存在
+      // 4.查询用户是否存在
       const user = await this.prisma.user.findUnique({
         where: { id: decoded.userId },
       });
       if (!user) return this.response.error(null, "用户不存在");
+      // 5.校验 tokenVersion：登出/刷新后递增，旧 refreshToken 立即失效
+      //    实现 refreshToken 单次使用 + 主动吊销
+      if (decoded.tokenVersion !== user.tokenVersion) {
+        return this.response.error(null, "refreshToken无效");
+      }
+      // 6.递增 tokenVersion，使本次使用的 refreshToken 立即失效（单次使用）
+      const updated = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { tokenVersion: { increment: 1 } },
+      });
+      // 7.签发新的 token 对
       const token = this.authService.generateToken({
         userId: user.id,
         name: user.name,
         email: user.email,
+        tokenVersion: updated.tokenVersion,
       });
-      return this.response.success(token);
+      this.setRefreshCookie(res, token.refreshToken);
+      return this.response.success({ accessToken: token.accessToken });
     } catch {
       return this.response.error(null, "refreshToken无效");
     }
+  }
+  // 登出：递增 tokenVersion 吊销所有已签发 token，并清除 refreshToken cookie
+  async logout(userId: string, res: Response) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { tokenVersion: { increment: 1 } },
+    });
+    this.clearRefreshCookie(res);
+    return this.response.success(null);
   }
   // 上传头像
   async uploadAvatar(file: Express.Multer.File) {

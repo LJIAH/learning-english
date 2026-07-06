@@ -1,4 +1,3 @@
-import type { Token } from "@en/common/user";
 import axios from "axios";
 import type { Response } from "..";
 
@@ -6,6 +5,7 @@ import type { Response } from "..";
 const refreshRequest = axios.create({
   baseURL: "/api/v1",
   timeout: 50000,
+  withCredentials: true, // 携带 httpOnly cookie 中的 refreshToken
 });
 refreshRequest.interceptors.response.use(
   (res) => res.data,
@@ -14,5 +14,6 @@ refreshRequest.interceptors.response.use(
 
 const request = <T>(p: Promise<unknown>) => p as Promise<Response<T>>;
 
-export const refreshTokenApi = (data: Omit<Token, "accessToken">) =>
-  request<Token>(refreshRequest.post("/user/refresh-token", data));
+// refreshToken 从 httpOnly cookie 自动携带，无需在请求体中传递
+export const refreshTokenApi = () =>
+  request<{ accessToken: string }>(refreshRequest.post("/user/refresh-token"));

@@ -5,7 +5,6 @@ import axios, {
 import { useUserStore } from "@/stores/user";
 import router from "@/router";
 import { refreshTokenApi } from "./auth";
-import type { Token } from "@en/common/user";
 import { ElMessage } from "element-plus";
 export const uploadUrl = import.meta.env.VITE_UPLOAD_URL;
 export const socketUrl = import.meta.env.VITE_SOCKET_URL;
@@ -15,7 +14,12 @@ const request = <T>(p: Promise<unknown>) => p as Promise<Response<T>>;
 
 /** 创建类型安全的请求工具，内置标准响应拦截器 */
 const createApi = (baseURL: string) => {
-  const api = axios.create({ baseURL, timeout });
+  const api = axios.create({
+    baseURL,
+    timeout,
+    // 携带凭证：接收/发送 httpOnly cookie（refreshToken）
+    withCredentials: true,
+  });
 
   let isRefreshing = false;
   let pendingQueue: Array<{
@@ -66,10 +70,9 @@ const createApi = (baseURL: string) => {
 
       // 401 token 过期
       const userStore = useUserStore();
-      const refreshToken = userStore.getRefreshToken;
       const accessToken = userStore.getAccessToken;
-      // 这个判断表示如果refreshToken或accessToken不存在，则直接登出，因为没有refreshToken也无法获取新的accessToken，没有accessToken则无法访问受保护的资源
-      if (!refreshToken || !accessToken) {
+      // 没有 accessToken 说明未登录；refreshToken 由 httpOnly cookie 维护，无需在前端判断
+      if (!accessToken) {
         userStore.logout();
         router.push("/");
         ElMessage.error("登录已过期,请重新登录");
@@ -91,10 +94,11 @@ const createApi = (baseURL: string) => {
 
       isRefreshing = true;
       try {
-        const result = await refreshTokenApi({ refreshToken });
+        // refreshToken 从 httpOnly cookie 自动携带
+        const result = await refreshTokenApi();
         if (result.success && result.data) {
-          const newToken = (result.data as Token).accessToken;
-          userStore.updateToken(result.data as Token);
+          const newToken = result.data.accessToken;
+          userStore.updateAccessToken(newToken);
           // 用新 token 重试原始请求
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
           // 此时将等待队列有可能为 空，因为请求可能在刷新token完成之前就返回了

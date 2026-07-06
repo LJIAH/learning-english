@@ -44,12 +44,15 @@ export type Token = {
   refreshToken: string; // 刷新令牌
 };
 
+// 前端可见的用户信息：refreshToken 不再下发到前端（改存 httpOnly cookie），只返回 accessToken
 export type WebResultUser = ResultUser & {
-  token: Token;
+  accessToken: string;
 };
 // token的荷载
 export type TokenPayload = Pick<User, "name" | "email"> & {
   userId: User["id"];
+  // token 版本号，与数据库 tokenVersion 比对，用于吊销与 refreshToken 单次使用
+  tokenVersion: number;
 };
 export type AccessTokenPayload = TokenPayload & { tokenType: "access" };
 export type RefreshTokenPayload = TokenPayload & { tokenType: "refresh" };

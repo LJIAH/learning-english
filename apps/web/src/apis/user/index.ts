@@ -12,6 +12,8 @@ export const login = (data: UserLogin) =>
 // 用户注册
 export const register = (data: UserRegister) =>
   serverRequest.post<WebResultUser>("/user/register", data);
+// 用户登出（后端吊销 token 并清除 cookie）
+export const logout = () => serverRequest.post<null>("/user/logout");
 // 用户上传头像
 export const uploadAvatar = (data: FormData) =>
   serverRequest.post<AvatarResult>("/user/upload-avatar", data);

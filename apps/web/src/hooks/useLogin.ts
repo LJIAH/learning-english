@@ -2,6 +2,7 @@ import { ref, watch } from "vue";
 import { useUserStore } from "@/stores/user";
 import { ElMessageBox } from "element-plus";
 import { useRouter } from "vue-router";
+import { logout as logoutApi } from "@/apis/user";
 
 const isShowLogin = ref(false);
 let pendingResolve: (() => void) | null = null;
@@ -59,7 +60,13 @@ export const useLogin = () => {
       confirmButtonText: "确定",
       cancelButtonText: "取消",
       type: "warning",
-    }).then(() => {
+    }).then(async () => {
+      // 通知后端吊销 token 并清除 cookie（best-effort，失败也清除本地状态）
+      try {
+        await logoutApi();
+      } catch {
+        // 忽略：即使后端登出失败也清除本地状态
+      }
       userStore.logout();
       router.push("/");
     });

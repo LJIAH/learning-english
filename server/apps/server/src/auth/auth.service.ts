@@ -18,10 +18,14 @@ export class AuthService {
     // payload荷载可以让开发者自定义信息，比如{userId, name, email}
     // tokenType: access | refresh, 用于标识token的类型，这样做的目的是为了防止accessToken和refreshToken互相冒充
     return {
-      accessToken: this.jwtService.sign<AccessTokenPayload>({
-        ...payload,
-        tokenType: "access",
-      }),
+      accessToken: this.jwtService.sign<AccessTokenPayload>(
+        {
+          ...payload,
+          tokenType: "access",
+        },
+        // 显式指定过期时间，避免依赖全局默认值导致意图不明确
+        { expiresIn: "15m" },
+      ),
       refreshToken: this.jwtService.sign<RefreshTokenPayload>(
         {
           ...payload,
