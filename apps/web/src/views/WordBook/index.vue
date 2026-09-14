@@ -33,11 +33,59 @@
       >
     </div>
     <div class="grid grid-cols-3 gap-2">
-      <div
-        class="bg-white hover:bg-blue-50 border border-blue-200 text-gray-800 rounded-[10px] p-4 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md h-55"
-        v-for="item in list"
-        :key="item.id"
-      >
+      <template v-if="loading">
+        <div
+          v-for="i in query.pageSize"
+          :key="'skeleton-' + i"
+          class="bg-white border border-blue-200 rounded-[10px] p-4 h-55"
+        >
+          <el-skeleton animated>
+            <template #template>
+              <el-skeleton-item variant="text" style="width: 30%" />
+              <el-skeleton-item
+                variant="text"
+                style="width: 22%; margin-top: 10px"
+              />
+              <el-skeleton-item
+                variant="text"
+                style="width: 100%; margin-top: 14px"
+              />
+              <el-skeleton-item
+                variant="text"
+                style="width: 88%; margin-top: 8px"
+              />
+              <el-skeleton-item
+                variant="text"
+                style="width: 100%; margin-top: 14px"
+              />
+              <el-skeleton-item
+                variant="text"
+                style="width: 70%; margin-top: 8px"
+              />
+              <div class="mt-4 flex items-center gap-2">
+                <el-skeleton-item
+                  variant="button"
+                  style="width: 40px; height: 20px"
+                />
+                <el-skeleton-item
+                  variant="button"
+                  style="width: 52px; height: 20px"
+                />
+                <el-skeleton-item
+                  variant="button"
+                  style="width: 40px; height: 20px"
+                />
+              </div>
+            </template>
+          </el-skeleton>
+        </div>
+      </template>
+      <template v-else>
+        <div
+          class="bg-white hover:bg-blue-50 border border-blue-200 text-gray-800 rounded-[10px] p-4 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md h-55"
+          v-for="item in list"
+          :key="item.id"
+        >
         <div class="">
           <div class="text-sm font-semibold text-blue-600 mb-1">
             {{ item.word }}
@@ -52,7 +100,7 @@
             {{ item.definition }}
           </div>
           <div
-            v-html="item.translation"
+            v-safe-html="item.translation"
             class="text-sm text-gray-600 mb-1 overflow-hidden line-clamp-2"
           ></div>
           <div
@@ -69,6 +117,7 @@
           </div>
         </div>
       </div>
+      </template>
       <el-pagination
         class="mt-10"
         background
@@ -91,6 +140,7 @@ const { playAudio } = useAudio({});
 
 const total = ref<WordList["total"]>(0);
 const list = ref<WordList["list"]>([]);
+const loading = ref(false);
 const query = ref<WordQuery>({
   page: 1,
   pageSize: 12,
@@ -105,10 +155,15 @@ const query = ref<WordQuery>({
   ky: false,
 });
 async function getList() {
-  const res = await getWordBookList(query.value);
-  if (res.success) {
-    total.value = res.data?.total || 0;
-    list.value = res.data?.list || [];
+  loading.value = true;
+  try {
+    const res = await getWordBookList(query.value);
+    if (res.success) {
+      total.value = res.data?.total || 0;
+      list.value = res.data?.list || [];
+    }
+  } finally {
+    loading.value = false;
   }
 }
 const searchWord = () => {

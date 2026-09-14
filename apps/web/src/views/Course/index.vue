@@ -23,10 +23,56 @@
           label="我的课程"
         ></el-tab-pane>
       </el-tabs>
-      <el-empty v-if="list?.length === 0" description="暂无课程"></el-empty>
+      <div
+        v-if="loading"
+        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+      >
+        <div
+          v-for="i in 6"
+          :key="'skeleton-' + i"
+          class="bg-white rounded-2xl overflow-hidden border border-zinc-100 shadow-sm"
+        >
+          <el-skeleton animated>
+            <template #template>
+              <el-skeleton-item
+                variant="image"
+                style="width: 100%; height: 280px; display: block"
+              />
+              <div class="p-5">
+                <el-skeleton-item
+                  variant="text"
+                  style="width: 55%; height: 16px"
+                />
+                <el-skeleton-item
+                  variant="text"
+                  style="width: 100%; margin-top: 12px"
+                />
+                <el-skeleton-item
+                  variant="text"
+                  style="width: 85%; margin-top: 8px"
+                />
+                <div
+                  class="mt-4 pt-4 border-t border-zinc-100 flex items-center justify-between"
+                >
+                  <el-skeleton-item variant="text" style="width: 40%" />
+                  <el-skeleton-item variant="text" style="width: 15%" />
+                </div>
+                <el-skeleton-item
+                  variant="button"
+                  style="width: 100%; height: 40px; margin-top: 16px"
+                />
+              </div>
+            </template>
+          </el-skeleton>
+        </div>
+      </div>
+      <el-empty
+        v-else-if="list?.length === 0"
+        description="暂无课程"
+      ></el-empty>
 
       <!-- 课程卡片 3 列 -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         <article
           v-for="item in list"
           :key="item.id"
@@ -94,13 +140,19 @@ const list = ref<CourseList | null>([]);
 const selectedCourse = ref<Course | null>(null); // 选中的课程
 const payVisible = ref(false); // 控制支付弹窗的显示与隐藏
 const currentTab = ref("list");
+const loading = ref(false);
 const getList = async () => {
-  if (currentTab.value === "list") {
-    const res = await getCourseList();
-    list.value = res.data;
-  } else {
-    const res = await getMyCourse();
-    list.value = res.data;
+  loading.value = true;
+  try {
+    if (currentTab.value === "list") {
+      const res = await getCourseList();
+      list.value = res.data;
+    } else {
+      const res = await getMyCourse();
+      list.value = res.data;
+    }
+  } finally {
+    loading.value = false;
   }
 };
 const openPay = async (course: Course) => {
