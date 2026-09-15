@@ -198,7 +198,12 @@ export class UserService {
     const port = this.configService.get<number>("MINIO_PORT");
     const endpoint = this.configService.get<string>("MINIO_ENDPOINT");
     const databaseUrl = `/${bucket}/${fileName}`; // Database URL 后面会存到数据库
-    const previewUrl = `${protocol}://${endpoint}:${port}${databaseUrl}`; // Preview URL 前端用这个
+    // 服务端用 MINIO_ENDPOINT 连接 MinIO，浏览器则通过 MINIO_PUBLIC_URL 访问，
+    // 同机部署时这两个地址并不相同（回环地址对浏览器没有意义）
+    const publicUrl = this.configService.get<string>("MINIO_PUBLIC_URL");
+    const previewUrl = publicUrl
+      ? `${publicUrl.replace(/\/+$/, "")}${databaseUrl}` // Preview URL 前端用这个
+      : `${protocol}://${endpoint}:${port}${databaseUrl}`; // 未配置对外地址时回退到原逻辑
     return this.response.success({
       previewUrl,
       databaseUrl,

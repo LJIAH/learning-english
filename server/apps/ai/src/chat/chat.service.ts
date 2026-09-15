@@ -6,7 +6,7 @@ import {
   createBochaSearch,
 } from "../llm/llm.config";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
-import type { AIMessageChunk, ReactAgent } from "langchain";
+import type { AIMessageChunk } from "langchain";
 import { ChatDto, ChatRoleType } from "@en/common/chat";
 import { createAgent } from "langchain";
 import { chatMode } from "../prompt/prompt.mode";

@@ -10,10 +10,12 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { UserService } from "./user.service";
-import type { UserRegister, UserLogin, UserUpdate } from "@en/common/user";
 import { AuthGuard } from "@libs/shared/auth/auth.guard";
 import { ThrottlerGuard, Throttle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
+import { RegisterUserDto } from "./dto/register-user.dto";
+import { LoginUserDto } from "./dto/login-user.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
 
 @Controller("user")
 export class UserController {
@@ -24,21 +26,26 @@ export class UserController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post("login")
   login(
-    @Body() loginUserDto: UserLogin,
+    @Body() loginUserDto: LoginUserDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.userService.login(loginUserDto, res);
   }
 
+  // 注册：同样限制 60 秒内最多 5 次请求，防止批量注册
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post("register")
   register(
-    @Body() registerUserDto: UserRegister,
+    @Body() registerUserDto: RegisterUserDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.userService.register(registerUserDto, res);
   }
 
-  // 刷新token：refreshToken 从 httpOnly cookie 读取
+  // 刷新token：refreshToken 从 httpOnly cookie 读取；限制频率防止滥用
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post("refresh-token")
   refreshToken(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     return this.userService.refreshToken(req.cookies?.refreshToken, res);
@@ -51,9 +58,21 @@ export class UserController {
     return this.userService.logout(req.user.userId, res);
   }
 
-  // 上传头像
+  // 上传头像：需要登录认证
+  @UseGuards(AuthGuard)
   @Post("upload-avatar")
-  @UseInterceptors(FileInterceptor("file")) // 限制前端上传的key为file
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+      fileFilter: (_req, file, cb) => {
+        // 仅允许图片类型，防止上传可执行/恶意文件
+        if (!file.mimetype.startsWith("image/")) {
+          return cb(new Error("仅允许上传图片文件"), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
   uploadAvatar(@UploadedFile() file: Express.Multer.File) {
     return this.userService.uploadAvatar(file);
   }
@@ -61,7 +80,7 @@ export class UserController {
   // 更新用户信息
   @UseGuards(AuthGuard)
   @Post("update-user")
-  updateUser(@Body() updateUserDto: UserUpdate, @Req() req: Request) {
+  updateUser(@Body() updateUserDto: UpdateUserDto, @Req() req: Request) {
     const user = req.user;
     return this.userService.updateUser(updateUserDto, user);
   }
