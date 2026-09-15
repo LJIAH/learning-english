@@ -1,5 +1,5 @@
 {
-  "packageManager": "pnpm@11.9.0",
+  "packageManager": "pnpm@11.10.0",
   "scripts": {
     "web": "pnpm --filter @en/web dev",
     "tracker": "pnpm --filter @en/tracker dev",
@@ -8,7 +8,8 @@
     "all": "concurrently \"pnpm run web\" \"pnpm run server\" \"pnpm run ai\"",
     "minio": "cd ../minio && start.cmd",
     "ngrok": "cd ../ngrok && start.cmd",
-    "dev": "concurrently -n minio,ngrok,app \"pnpm minio\" \"pnpm ngrok\" \"pnpm all\""
+    "natapp": "cd ../natapp && run_natapp.bat",
+    "dev": "concurrently -n minio,natapp,app \"pnpm minio\" \"pnpm natapp\" \"pnpm all\""
   },
   "dependencies": {
     "dayjs": "^1.11.21",
