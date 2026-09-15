@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-[60vh] bg-zinc-50/80">
-    <div class="w-[1200px] mx-auto px-4 pt-12 pb-24">
+    <div class="w-300 mx-auto px-4 pt-12 pb-24">
       <!-- 标题 -->
       <header class="mb-12 text-center">
         <p
