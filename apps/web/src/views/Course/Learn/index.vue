@@ -117,7 +117,7 @@
                 </p>
                 <div
                   class="text-zinc-700 leading-relaxed prose prose-sm max-w-none"
-                  v-html="currentWord?.definition"
+                  v-safe-html="currentWord?.definition"
                 />
               </div>
               <!-- 翻译 -->
@@ -129,7 +129,7 @@
                 </p>
                 <div
                   class="text-zinc-600 leading-relaxed whitespace-pre-line prose prose-sm max-w-none"
-                  v-html="currentWord?.translation"
+                  v-safe-html="currentWord?.translation"
                 />
               </div>
               <!--拼写练习-->

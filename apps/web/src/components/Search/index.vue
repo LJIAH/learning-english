@@ -38,7 +38,7 @@
             {{ item.word }}
           </div>
           <div
-            v-html="item.translation"
+            v-safe-html="item.translation"
             class="text-sm text-gray-700 mb-1 overflow-hidden line-clamp-2"
           />
         </div>

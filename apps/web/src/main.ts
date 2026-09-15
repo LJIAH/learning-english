@@ -1,5 +1,6 @@
 import { createApp } from "vue";
 import vFocus from "./directives/focus";
+import vSafeHtml from "./directives/safe-html";
 import { createPinia } from "pinia";
 import App from "./App.vue";
 import router from "./router";
@@ -17,6 +18,7 @@ app.use(ElementPlus, {
   locale: zhCn,
 });
 app.directive("focus", vFocus);
+app.directive("safe-html", vSafeHtml);
 app.use(router);
 
 app.mount("#app");

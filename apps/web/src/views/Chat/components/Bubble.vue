@@ -135,6 +135,7 @@ import { marked } from "marked";
 import "@/assets/css/deep-seek.css";
 import { useAvatar } from "@/hooks/useAvatar";
 import { useVoiceToText } from "@/hooks/useVoiceToText";
+import { sanitizeHtml } from "@/utils/sanitize";
 
 const { avatar } = useAvatar();
 const { isListening, finalText, interimText, error, start, stop, reset } =
@@ -207,6 +208,7 @@ const sendMessage = () => {
 };
 const parseMarkdown = (markdown: string) => {
   if (!markdown) return "";
-  return marked.parse(markdown);
+  // marked 解析后再用 DOMPurify 净化，防止 AI 返回的恶意脚本触发 XSS
+  return sanitizeHtml(marked.parse(markdown) as string);
 };
 </script>
