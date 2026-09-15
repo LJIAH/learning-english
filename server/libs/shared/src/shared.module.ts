@@ -27,7 +27,11 @@ import { BullModule } from "@nestjs/bullmq";
     ResponseModule,
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [".env"],
+      // 本地开发加载 .env.dev，生产（NODE_ENV=production）加载 .env。
+      // 默认走开发方向，避免本地误连生产库；生产启动必须显式设置 NODE_ENV=production。
+      envFilePath: [
+        process.env.NODE_ENV === "production" ? ".env" : ".env.dev",
+      ],
     }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
