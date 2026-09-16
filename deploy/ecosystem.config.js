@@ -48,22 +48,29 @@ module.exports = {
       time: true, // 日志行带时间戳
     },
 
-    // AI 服务（server/apps/ai，监听 3001）当前在生产上没有运行：
-    // nginx 的 /ai/ 反代指向 127.0.0.1:3001，但该端口没有监听，所以 /ai/ 实际是 502。
-    // 需要启用时先在服务器执行 `pnpm --filter @en/server exec nest build ai`
-    // （构建 AI 应用，产物在 server/dist/apps/ai/），再取消下面这段的注释，
-    // 然后 `pm2 startOrReload deploy/ecosystem.config.js --only english-ai && pm2 save`。
+    // AI 服务（server/apps/ai，监听 3001），nginx 的 /ai/ 反代指向它。
     //
-    // {
-    //   name: "english-ai",
-    //   cwd: serverDir,
-    //   script: path.join(serverDir, "dist/apps/ai/apps/ai/src/main.js"),
-    //   instances: 1,
-    //   exec_mode: "fork",
-    //   listen_timeout: 20000,
-    //   env: { NODE_ENV: "production" },
-    //   merge_logs: true,
-    //   time: true,
-    // },
+    // 构建：pnpm --filter @en/server run build:ai（deploy.sh / bootstrap.sh 里已经包含这一步）
+    // 入口和 server 一样是嵌套路径，产物在 server/dist/apps/ai/apps/ai/src/main.js
+    //
+    // 用 fork 单实例而不是 cluster：它注册了一个 BullMQ repeatable job（每天 00:00 的单词
+    // 记忆报告），多实例会让同一个定时任务在每个实例上都注册一遍
+    //
+    // 注意：这个进程一启动，每天凌晨就会给「开了定时任务 + 留了邮箱 + 当天背过单词」的用户
+    // 跑 LLM 生成报告并真实发信（DigestService.onModuleInit 注册的定时任务）。
+    // 想临时停掉，`pm2 stop english-ai` 只能撑到下一次发布——deploy.sh 的 startOrReload
+    // 会把它重新拉起。要长期停发信就改代码把 DigestModule 从 AiModule 摘掉。
+    {
+      name: "english-ai",
+      cwd: serverDir,
+      script: path.join(serverDir, "dist/apps/ai/apps/ai/src/main.js"),
+      instances: 1,
+      exec_mode: "fork",
+      listen_timeout: 20000,
+      max_memory_restart: "600M",
+      env: { NODE_ENV: "production" },
+      merge_logs: true,
+      time: true,
+    },
   ],
 };

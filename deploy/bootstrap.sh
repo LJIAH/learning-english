@@ -112,13 +112,15 @@ migrate_env() {
 }
 
 install_build() {
-  log "4/8 安装依赖并构建（顺序不可变：tracker -> web -> server）"
+  log "4/8 安装依赖并构建（顺序不可变：tracker -> web -> server -> ai）"
   printf '    说明：没有 postinstall 钩子，prisma generate 必须显式跑；web 依赖 tracker 的 dist\n'
   run_sh "pnpm install --frozen-lockfile" "$REPO_DIR"
   run_sh "pnpm --filter @en/server run prisma:generate" "$REPO_DIR"
   run_sh "pnpm --filter @en/tracker build" "$REPO_DIR"
   run_sh "pnpm --filter @en/web build" "$REPO_DIR"
   run_sh "pnpm --filter @en/server build" "$REPO_DIR"
+  # apps/ai 与 apps/server 同在 server/ 这个 nest 项目下，产物是另一条嵌套路径
+  run_sh "pnpm --filter @en/server run build:ai" "$REPO_DIR"
 }
 
 assert_artifacts() {
@@ -130,6 +132,9 @@ assert_artifacts() {
   local entry="$REPO_DIR/server/dist/apps/server/apps/server/src/main.js"
   [ -f "$entry" ] || die "找不到后端入口 $entry（nest build 输出路径变了？用 find $REPO_DIR/server/dist -name main.js 确认）"
   ok "后端入口存在"
+  local ai_entry="$REPO_DIR/server/dist/apps/ai/apps/ai/src/main.js"
+  [ -f "$ai_entry" ] || die "找不到 AI 应用入口 $ai_entry（build:ai 没跑或失败，ecosystem.config.js 里的 english-ai 会起不来）"
+  ok "AI 应用入口存在"
   [ -f "$REPO_DIR/apps/web/dist/index.html" ] || die "找不到前端产物 apps/web/dist/index.html"
   if grep -rq 'english.kevy.top' "$REPO_DIR/apps/web/dist/assets"; then
     ok "前端 bundle 带站点地址（apps/web/.env.production 生效）"
@@ -146,17 +151,22 @@ switch_pm2() {
   run pm2 startOrReload "$REPO_DIR/deploy/ecosystem.config.js" --update-env
   run pm2 save
   if [ "$DRY" = "0" ]; then
-    # Nest + Prisma 冷启动要十几秒（cluster 2 实例更慢），固定 sleep 会误报
-    local i
+    # Nest + Prisma 冷启动要十几秒（cluster 2 实例更慢），固定 sleep 会误报。
+    # 3000（english-server）和 3001（english-ai）都要等到
+    local i p
     for i in $(seq 1 60); do
-      ss -lntp 2>/dev/null | grep -q ':3000' && break
+      if ss -lntp 2>/dev/null | grep -q ':3000' && ss -lntp 2>/dev/null | grep -q ':3001'; then
+        break
+      fi
       sleep 1
     done
-    if ss -lntp 2>/dev/null | grep -q ':3000'; then
-      ok "3000 端口已监听（等待 ${i}s）"
-    else
-      warn "等了 60s 3000 端口还是没监听，排查：pm2 logs $PM2_APP"
-    fi
+    for p in 3000 3001; do
+      if ss -lntp 2>/dev/null | grep -q ":$p"; then
+        ok "$p 端口已监听（等待 ${i}s）"
+      else
+        warn "等了 60s $p 端口还是没监听，排查：pm2 logs"
+      fi
+    done
   fi
 }
 
@@ -187,9 +197,10 @@ final_checks() {
        同目录扩展文件：api.conf / spa.conf / minio.conf
      改完：nginx -t && nginx -s reload
 
-  2. /ai/ 反代指向的 3001 端口目前没有进程监听，访问 /ai/ 会 502。
-     要么把 AI 服务跑起来（ecosystem.config.js 里有注释掉的示例），
-     要么先把 nginx 里的 /ai/ 代理摘掉。
+  2. english-ai 已经跟着起来了（3001 端口，nginx 的 /ai/ 反代指向它）。
+     但它注册了每天 00:00 的 BullMQ 定时任务，会给「开了定时任务 + 留了邮箱 + 当天背过
+     单词」的用户跑 LLM 生成日报并真实发信。发信链路还没准备好就先 `pm2 stop english-ai`
+     （注意下一次 deploy.sh 的 startOrReload 会把它再拉起来）。
 
 之后的日常操作：
   发布   bash deploy/deploy.sh --deploy

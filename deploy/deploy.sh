@@ -94,13 +94,21 @@ install_build() {
   pnpm --filter @en/web build
   log "构建 @en/server"
   pnpm --filter @en/server build
+
+  # apps/ai 是同一个 nest 项目里的第二个应用，入口同样是嵌套路径。
+  # 漏掉这一步不会报错：dist/apps/ai 会一直停留在上一次成功构建的版本，
+  # 表现为「AI 发布成功但跑的是旧代码」。
+  log "构建 @en/ai"
+  pnpm --filter @en/server run build:ai
 }
 
 assert_artifacts() {
   log "校验构建产物"
   local entry="$REPO_DIR/server/dist/apps/server/apps/server/src/main.js"
+  local ai_entry="$REPO_DIR/server/dist/apps/ai/apps/ai/src/main.js"
   local web_index="$REPO_DIR/apps/web/dist/index.html"
   [ -f "$entry" ] || die "后端入口不存在: $entry（构建失败，或 nest-cli 输出的嵌套路径变了）"
+  [ -f "$ai_entry" ] || die "AI 应用入口不存在: $ai_entry（build:ai 没跑或失败，ecosystem.config.js 里的 english-ai 会起不来）"
   [ -f "$web_index" ] || die "前端产物不存在: $web_index"
 
   # 前端把 VITE_UPLOAD_URL / VITE_SOCKET_URL 编译进 bundle，取值来自 apps/web/.env.production。
@@ -144,6 +152,9 @@ reload_pm2() {
   # cluster 模式下 startOrReload 会逐个替换 worker：先起新的，就绪后再杀旧的，实现零停机。
   # 应用自己的 .env 是 Nest 在运行时读取的文件，所以改了 .env 只需 reload，
   # 不需要 --update-env（那是给 pm2 保存的环境变量用的）
+  #
+  # 刻意不加 --only：ecosystem.config.js 里的 english-server 和 english-ai 由同一次
+  # startOrReload 统一接管，所以新增或改动进程都只改那一个文件，不存在「一个自动一个手动」
   pm2 startOrReload deploy/ecosystem.config.js
   pm2 save
 }
@@ -158,7 +169,7 @@ do_deploy() {
   reload_pm2
   log "发布完成: $(cd "$REPO_DIR" && git rev-parse --short HEAD)"
   bash "$REPO_DIR/deploy/verify.sh"
-  printf '\n完成。日志查看: pm2 logs %s\n' "$PM2_APP"
+  printf '\n完成。日志查看: pm2 logs %s / pm2 logs english-ai\n' "$PM2_APP"
 }
 
 do_rollback() {

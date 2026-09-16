@@ -10,7 +10,8 @@
 #   2. 接口能返回结构化响应（用注册接口的空 body 探针，期望 400 参数校验）
 #   3. CORS 白名单与 server/.env 里的 CORS_ORIGIN 一致（预检期望带回 Allow-Origin）
 #   4. 非白名单来源不再返回 5xx（回归检查：这曾经是个把整个接口打成 500 的 bug）
-#   5. 可选 tracker 链路 UV -> event
+#   5. AI 应用（english-ai）在 3001 上就绪
+#   6. 可选 tracker 链路 UV -> event
 #
 # 刻意不用 set -e：自检要把所有项跑完再汇总，不能第一项失败就退出
 
@@ -19,6 +20,7 @@ set -uo pipefail
 REPO_DIR="${REPO_DIR:-/www/wwwroot/english-code}"
 WEB_ROOT="${WEB_ROOT:-/www/wwwroot/english.kevy.top}"
 API_BASE="${API_BASE:-http://127.0.0.1:3000/api/v1}"
+AI_BASE="${AI_BASE:-http://127.0.0.1:3001/ai/v1}"
 
 fail=0
 pass() { printf '  [PASS] %s\n' "$*"; }
@@ -37,7 +39,7 @@ probe_register() { # $1 = Origin（可为空）
   fi
 }
 
-printf '\n[1/4] 端口监听\n'
+printf '\n[1/5] 端口监听\n'
 if command -v ss >/dev/null 2>&1; then
   if ss -lntp 2>/dev/null | grep -q ':3000'; then
     pass "3000 端口有监听"
@@ -48,7 +50,7 @@ else
   note "系统没有 ss 命令，跳过端口检查，由下一项接口探针间接验证"
 fi
 
-printf '\n[2/4] 接口探针\n'
+printf '\n[2/5] 接口探针\n'
 code="$(probe_register '')"
 case "$code" in
   400) pass "POST /user/register 返回 400（参数校验生效，业务链路通）" ;;
@@ -57,7 +59,7 @@ case "$code" in
   *)   bad "POST /user/register 返回 $code（期望 400，或 429 表示限流）" ;;
 esac
 
-printf '\n[3/4] CORS 白名单与 .env 一致性\n'
+printf '\n[3/5] CORS 白名单与 .env 一致性\n'
 env_file="$REPO_DIR/server/.env"
 origin=""
 if [ ! -f "$env_file" ]; then
@@ -82,7 +84,7 @@ else
   fi
 fi
 
-printf '\n[4/4] 非白名单来源回归检查\n'
+printf '\n[4/5] 非白名单来源回归检查\n'
 code="$(probe_register 'https://not-in-whitelist.example.com')"
 if [ "$code" -ge 500 ] 2>/dev/null; then
   bad "非白名单来源返回 $code（期望 4xx）：CORS 拒绝被抛成异常，会被 Nest 兜底成 500"
@@ -91,6 +93,21 @@ elif [ "$code" = "000" ]; then
 else
   pass "非白名单来源返回 $code（非 5xx，符合预期）"
 fi
+
+printf '\n[5/5] AI 应用（english-ai）\n'
+if command -v ss >/dev/null 2>&1; then
+  if ss -lntp 2>/dev/null | grep -q ':3001'; then
+    pass "3001 端口有监听"
+  else
+    bad "3001 端口没有监听（pm2 list 看 english-ai 的状态，或 pm2 logs english-ai）"
+  fi
+fi
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$AI_BASE" 2>/dev/null)"
+case "$code" in
+  200) pass "GET $AI_BASE 返回 200（Nest 已就绪：说明 AI_DATABASE_URL 的检查点表初始化成功）" ;;
+  000) bad "AI 应用无响应（连接被拒绝或超时）：多半是 AI_DATABASE_URL 连不上，看 pm2 logs english-ai" ;;
+  *)   bad "GET $AI_BASE 返回 $code（期望 200）" ;;
+esac
 
 if [ "${VERIFY_TRACKER:-0}" = "1" ]; then
   printf '\n[可选] tracker 链路 UV -> event\n'
