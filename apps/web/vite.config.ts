@@ -27,7 +27,7 @@ export default defineConfig({
     },
   },
   build: {
-    chunkSizeWarningLimit: 500, // 调高阈值
+    chunkSizeWarningLimit: 1000, // 调高阈值
     rolldownOptions: {
       output: {
         codeSplitting: true, // 开启智能分包
