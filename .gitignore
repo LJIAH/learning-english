@@ -9,6 +9,11 @@ build/
 .env
 .env.*
 
+# 例外：前端构建期常量。VITE_* 会被 vite 内联进产物，本身是公开信息、不是密钥。
+# 不提交会导致「git clone 后构建」拿不到站点地址，上传/头像/课程图/Socket 全部失效。
+!apps/web/.env.production
+!apps/web/.env.development
+
 # Prisma 生成产物（按需 prisma generate 重新生成）
 **/generated/prisma/
 
