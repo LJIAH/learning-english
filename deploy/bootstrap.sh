@@ -146,11 +146,16 @@ switch_pm2() {
   run pm2 startOrReload "$REPO_DIR/deploy/ecosystem.config.js" --update-env
   run pm2 save
   if [ "$DRY" = "0" ]; then
-    sleep 3
+    # Nest + Prisma 冷启动要十几秒（cluster 2 实例更慢），固定 sleep 会误报
+    local i
+    for i in $(seq 1 60); do
+      ss -lntp 2>/dev/null | grep -q ':3000' && break
+      sleep 1
+    done
     if ss -lntp 2>/dev/null | grep -q ':3000'; then
-      ok "3000 端口已监听"
+      ok "3000 端口已监听（等待 ${i}s）"
     else
-      warn "3000 端口还没监听，排查：pm2 logs $PM2_APP"
+      warn "等了 60s 3000 端口还是没监听，排查：pm2 logs $PM2_APP"
     fi
   fi
 }
