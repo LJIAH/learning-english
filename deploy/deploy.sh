@@ -2,7 +2,7 @@
 #
 # 生产发布脚本（在服务器上执行）
 #
-#   bash deploy/deploy.sh             正常发布：拉取 -> 安装 -> 构建 -> 同步前端 -> 重载 pm2 -> 自检
+#   bash deploy/deploy.sh             正常发布：拉取 -> 安装 -> 构建 -> 应用迁移 -> 同步前端 -> 重载 pm2 -> 自检
 #   bash deploy/deploy.sh --rollback  回滚到上一次发布前的提交
 #   bash deploy/deploy.sh --help
 #
@@ -34,7 +34,7 @@ die()  { printf '\033[1;31m[error] %s\033[0m\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'USAGE'
 用法:
-  bash deploy/deploy.sh             发布（拉取 -> 安装 -> 构建 -> 同步前端 -> 重载 pm2 -> 自检）
+  bash deploy/deploy.sh             发布（拉取 -> 安装 -> 构建 -> 应用迁移 -> 同步前端 -> 重载 pm2 -> 自检）
   bash deploy/deploy.sh --rollback  回滚到上一次发布前的提交
   bash deploy/deploy.sh --help
 
@@ -120,6 +120,20 @@ assert_artifacts() {
   log "产物校验通过"
 }
 
+migrate_db() {
+  log "应用数据库迁移"
+  cd "$REPO_DIR"
+  # prisma migrate deploy：只把 prisma/migrations 里尚未执行过的迁移按顺序应用，
+  # 不生成新迁移、不重置数据；没有新迁移时是 no-op。
+  #
+  # 位置是刻意的 —— 排在产物校验之后、同步前端和重载之前：
+  #   * 构建或产物校验失败时，数据库和线上都还没被动过，今天的失败语义不变
+  #   * 迁移失败立刻退出，此时前端也还没同步，不会出现「新前端 + 旧后端」这种最难查的组合
+  #   * 迁移成功后只剩同步前端和重载，库比代码新的窗口只有几秒
+  pnpm --filter @en/server exec prisma migrate deploy \
+    || die "数据库迁移失败，已中止发布（前端未同步、pm2 未重载，线上仍是旧版本）"
+}
+
 sync_web() {
   log "同步前端产物到 web 根"
   local args=(-a --delete --human-readable)
@@ -164,6 +178,7 @@ do_deploy() {
   pull_code
   install_build
   assert_artifacts
+  migrate_db
   sync_web
   assert_layout
   reload_pm2
@@ -183,6 +198,9 @@ do_rollback() {
   # 回滚需要能构建旧代码；checkout 会一并切回当时的 pnpm-lock.yaml，所以 --frozen-lockfile 依旧成立
   git checkout --detach "$sha"
   warn "已切到 detached HEAD。下次正常执行 deploy.sh 时会自动切回 $BRANCH"
+  # 刻意不跑 migrate_db：回滚的是代码，不是数据库。
+  # migrate deploy 只能向前应用迁移，没有自动反向迁移，所以回滚前要确认那次发布
+  # 没有带不可逆的 schema 变更；verify.sh 的第 6 项会把这种情况报出来。
   install_build
   assert_artifacts
   sync_web

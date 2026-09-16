@@ -6,7 +6,7 @@
 
 - `ecosystem.config.js` — pm2 进程定义（`english-server` cluster 2 实例 + `english-ai` fork 1 实例，日志合并到 `/root/.pm2/logs`）
 - `deploy.sh` — 日常发布 `--deploy` / 回滚 `--rollback`
-- `verify.sh` — 发布后自检，只读、不改数据
+- `verify.sh` — 发布后自检（6 项：端口、接口探针、CORS 白名单、非白名单回归、AI 应用就绪、迁移与仓库一致），只读、不改数据
 - `bootstrap.sh` — 首次初始化 + 旧布局迁移，只跑一次
 
 ## 目标拓扑
@@ -59,7 +59,7 @@ bash /root/bootstrap.sh <仓库地址> --yes      # 确认后执行
 1. 前置检查：工具、旧配置 `WEB_ROOT/server/.env` 是否存在、代码目录是否已存在
 2. clone 仓库到 `/www/wwwroot/english-code`
 3. 把现网 `server/.env` 复制过去（`chmod 600`），密钥不重新生成
-4. `pnpm install --frozen-lockfile`、`prisma generate`，然后依次构建 tracker → web → server → ai
+4. `pnpm install --frozen-lockfile`、`prisma generate`、`prisma migrate deploy`，然后依次构建 tracker → web → server → ai
 5. 校验产物：后端入口文件存在、前端 bundle 里确实带上了站点地址（防止 `.env.production` 没生效却上线）
 6. 停掉旧 pm2 进程（原名 `main`），用 `deploy/ecosystem.config.js` 起新进程 `english-server` 和 `english-ai`，`pm2 save`
 7. 把 web 根里的非静态内容整体 `mv` 到 `/www/backup/english-pre-migration-<时间戳>`，再 rsync 前端产物过去
@@ -84,7 +84,9 @@ bash deploy/verify.sh               # 只自检
 - 只做 fast-forward（`merge --ff-only`），分叉就报错，不静默产生合并提交
 - 每次发布前把当前 commit 记到 `.deploy-state/previous-sha`，供回滚使用
 - 构建顺序固定 tracker → web → server → ai（web 依赖 `@en/tracker` 的 dist 产物；`server` 与 `ai` 是同一个 nest 项目下的两个应用，互不覆盖对方的 dist）
+- 迁移排在**产物校验之后、同步前端和重载之前**（`migrate_db`）：构建或校验失败时数据库和线上都没被动过；迁移失败立刻退出，此时前端还没同步，不会出现「新前端 + 旧后端」这种最难查的组合。没有新迁移时它是 no-op
 - `pm2 startOrReload` 不带 `--only`，`ecosystem.config.js` 里的所有进程（`english-server`、`english-ai`）由同一次发布统一接管，不存在需要手动启动的进程
+- `--rollback` 只回滚代码，**不回滚数据库**：`prisma migrate deploy` 只向前应用迁移，没有自动反向迁移。回滚前要确认那次发布没有带不可逆的 schema 变更；库与当前代码不一致时 `verify.sh` 的第 6 项会报出来
 - 同步前端用 `rsync -a --delete`，并排除 `.user.ini` / `.htaccess` / `.well-known/`，避免删掉宝塔和证书校验文件
 
 ## 需要人工做的一次性 nginx 清理

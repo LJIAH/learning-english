@@ -112,10 +112,12 @@ migrate_env() {
 }
 
 install_build() {
-  log "4/8 安装依赖并构建（顺序不可变：tracker -> web -> server -> ai）"
+  log "4/8 安装依赖、应用数据库迁移并构建（顺序不可变：install -> generate -> migrate -> tracker -> web -> server -> ai）"
   printf '    说明：没有 postinstall 钩子，prisma generate 必须显式跑；web 依赖 tracker 的 dist\n'
   run_sh "pnpm install --frozen-lockfile" "$REPO_DIR"
   run_sh "pnpm --filter @en/server run prisma:generate" "$REPO_DIR"
+  # 全新库必须先把迁移应用上去，否则应用起来连表都没有
+  run_sh "pnpm --filter @en/server exec prisma migrate deploy" "$REPO_DIR"
   run_sh "pnpm --filter @en/tracker build" "$REPO_DIR"
   run_sh "pnpm --filter @en/web build" "$REPO_DIR"
   run_sh "pnpm --filter @en/server build" "$REPO_DIR"
