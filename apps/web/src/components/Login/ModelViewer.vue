@@ -40,8 +40,8 @@
 import { ref, computed } from "vue";
 
 const IMAGES = {
-  login: "/images/teacher-login.png",
-  register: "/images/teacher-register.png",
+  login: "/images/teacher-login.webp",
+  register: "/images/teacher-register.webp",
 } as const;
 
 export type LoginType = keyof typeof IMAGES;

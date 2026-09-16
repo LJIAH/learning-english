@@ -12,8 +12,17 @@
       class="fixed inset-30 flex items-center justify-center z-50"
     >
       <div
-        class="w-250 h-160 bg-white rounded-2xl shadow-2xl overflow-hidden flex"
+        class="relative w-250 h-160 bg-white rounded-2xl shadow-2xl overflow-hidden flex"
       >
+        <!-- 关闭按钮 -->
+        <button
+          class="absolute top-4 right-4 z-10 w-9 h-9 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all duration-200 cursor-pointer"
+          aria-label="关闭"
+          @click="closeLogin"
+        >
+          <Close class="w-4 h-4" />
+        </button>
+
         <!-- 左侧 3D 模型区域 -->
         <ModelViewer ref="modelViewerRef" @changeType="changeType" />
 
@@ -30,6 +39,7 @@
 </template>
 
 <script setup lang="ts">
+import { Close } from "@element-plus/icons-vue";
 import ModelViewer, { type LoginType } from "./ModelViewer.vue";
 import LoginForm from "./LoginForm.vue";
 import RegisterForm from "./RegisterForm.vue";

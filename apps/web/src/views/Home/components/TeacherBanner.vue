@@ -1,7 +1,7 @@
 <template>
   <div class="relative w-full h-full overflow-hidden rounded-r-[20px]">
     <img
-      src="/images/teacher-home.png"
+      src="/images/teacher-home.webp"
       alt="AI 英语外教"
       draggable="false"
       class="absolute inset-x-0 -top-10 h-[calc(100%+2.5rem)] w-full object-cover object-top-right breathe"

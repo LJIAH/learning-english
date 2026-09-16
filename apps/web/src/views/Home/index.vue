@@ -7,7 +7,7 @@
       <div
         class="absolute inset-0 bg-linear-to-r from-gray-900 via-gray-900 to-gray-900/70 rounded-[20px]"
       />
-      <div class="relative z-8 p-8 flex flex-col justify-center">
+      <div class="relative z-8 p-8 flex flex-col">
         <span
           class="text-white text-1xl bg-indigo-500/20 rounded-[100px] px-4 py-2"
           >坚持5天打卡学习</span
