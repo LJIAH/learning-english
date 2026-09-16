@@ -80,7 +80,7 @@ bash deploy/verify.sh               # 只自检
 
 `deploy.sh` 的设计要点：
 
-- 工作区必须干净（`git status --porcelain` 为空）才允许拉代码，否则拒绝执行
+- 工作区必须干净（`git status --porcelain` 为空）才允许拉代码，否则拒绝执行；唯一例外是脚本自己的 `.deploy-state/`（已写进 `.gitignore`，且检查时会再过滤一次）
 - 只做 fast-forward（`merge --ff-only`），分叉就报错，不静默产生合并提交
 - 每次发布前把当前 commit 记到 `.deploy-state/previous-sha`，供回滚使用
 - 构建顺序固定 tracker → web → server → ai（web 依赖 `@en/tracker` 的 dist 产物；`server` 与 `ai` 是同一个 nest 项目下的两个应用，互不覆盖对方的 dist）

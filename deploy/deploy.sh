@@ -61,9 +61,14 @@ preflight() {
 pull_code() {
   log "拉取代码"
   cd "$REPO_DIR"
-  # 服务器上出现未提交改动，说明有人手改了源码，这正是本方案要消除的情况，直接拒绝发布
-  if [ -n "$(git status --porcelain)" ]; then
-    git status --short | head -20 >&2
+  # 服务器上出现未提交改动，说明有人手改了源码，这正是本方案要消除的情况，直接拒绝发布。
+  # 例外：.deploy-state/ 是本脚本自己写的上一版提交记录，属于状态而不是源码。
+  # 它已在 .gitignore 里，这里再过滤一次 —— 否则在老 checkout（还没有那条 ignore 规则）
+  # 上跑第二次发布时，脚本会被自己的产物拦下。
+  local dirty
+  dirty="$(git status --porcelain | grep -v '^?? \.deploy-state/$' || true)"
+  if [ -n "$dirty" ]; then
+    printf '%s\n' "$dirty" | head -20 >&2
     die "工作区有未提交改动，拒绝发布。请先 git stash，或用 git checkout -- <file> 还原"
   fi
   mkdir -p "$STATE_DIR"

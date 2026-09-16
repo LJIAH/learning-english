@@ -33,3 +33,7 @@ build/
 # 本地文档（不入库）
 docs/
 TODO/
+
+# 部署脚本的运行时状态（.deploy-state/previous-sha，在服务器上生成），不入库；
+# 它若被看成未跟踪改动，deploy.sh 的「工作区必须干净」检查会把自己拦下
+.deploy-state/
