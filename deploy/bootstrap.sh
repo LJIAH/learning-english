@@ -65,10 +65,13 @@ preflight() {
   [ -f "$WEB_ROOT/server/.env" ] || die "找不到旧配置 $WEB_ROOT/server/.env。这是要沿用的密钥文件，不能重新生成，也不该猜"
   ok "找到旧配置 $WEB_ROOT/server/.env"
 
-  if [ -e "$REPO_DIR" ]; then
-    die "$REPO_DIR 已存在。本脚本只做首次初始化，日常发布请用 deploy/deploy.sh；确认要重来就人工把该目录搬走"
+  if [ -d "$REPO_DIR/.git" ]; then
+    warn "$REPO_DIR 已存在且是 git 检出：这次只做拉取更新，不会重新克隆"
+  elif [ -e "$REPO_DIR" ]; then
+    die "$REPO_DIR 已存在但不是 git 检出（可能是上一次遗留的目录）。人工确认后搬走它再重跑"
+  else
+    ok "$REPO_DIR 尚不存在，将执行 clone"
   fi
-  ok "$REPO_DIR 尚不存在，可以 clone"
 
   if pm2 describe "$OLD_PM2_APP" >/dev/null 2>&1; then
     warn "检测到旧 pm2 进程 '$OLD_PM2_APP'，它占着 3000 端口，稍后会被停止并删除"
@@ -78,7 +81,12 @@ preflight() {
 }
 
 clone_code() {
-  log "2/8 clone 代码到 $REPO_DIR"
+  log "2/8 准备代码目录 $REPO_DIR"
+  if [ -d "$REPO_DIR/.git" ]; then
+    warn "已有代码目录，改为拉取 $BRANCH 最新代码（构建失败后可直接重跑本脚本）"
+    run_sh "git fetch origin '$BRANCH' && git checkout '$BRANCH' && git merge --ff-only 'origin/$BRANCH'" "$REPO_DIR"
+    return 0
+  fi
   run_sh "git clone --branch '$BRANCH' '$REPO_URL' '$REPO_DIR'" /www/wwwroot || die "clone 失败。
   私有仓库需要在服务器上配只读部署密钥：
     ssh-keygen -t ed25519 -f ~/.ssh/deploy_key -N ''
@@ -88,7 +96,11 @@ clone_code() {
 
 migrate_env() {
   log "3/8 沿用现网配置（密钥不重新生成）"
-  run install -m 600 "$WEB_ROOT/server/.env" "$REPO_DIR/server/.env"
+  if [ -f "$REPO_DIR/server/.env" ]; then
+    warn "代码目录里已有 server/.env，保持不动（不覆盖，避免把已改好的配置冲掉）"
+  else
+    run install -m 600 "$WEB_ROOT/server/.env" "$REPO_DIR/server/.env"
+  fi
   if [ "$DRY" = "0" ]; then
     if grep -qE '^[[:space:]]*CORS_ORIGIN=' "$REPO_DIR/server/.env"; then
       ok "CORS_ORIGIN 已存在"

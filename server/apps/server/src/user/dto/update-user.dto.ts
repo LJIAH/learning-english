@@ -5,6 +5,7 @@ import {
   IsString,
   Length,
   Matches,
+  ValidateIf,
 } from "class-validator";
 import { Transform } from "class-transformer";
 
@@ -58,7 +59,10 @@ export class UpdateUserDto {
     }
     return value;
   })
-  @IsOptional()
+  // 这里刻意不用 @IsOptional()：它会把 null 也当作"未提供"而跳过校验，
+  // 但该字段在库里是非空列（TEXT NOT NULL），null 只会在 Prisma 层抛异常、
+  // 被兜底成 500。改成"仅在未提供时跳过校验"，传 null 会明确返回 400。
+  @ValidateIf((dto: UpdateUserDto) => dto.timingTaskTime !== undefined)
   @IsString({ message: "定时任务时间必须为字符串" })
-  timingTaskTime?: string | null;
+  timingTaskTime?: string;
 }
