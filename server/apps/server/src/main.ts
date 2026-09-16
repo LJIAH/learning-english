@@ -44,10 +44,14 @@ async function bootstrap() {
     origin: (origin, callback) => {
       // origin 为 undefined 时（同源请求或服务器到服务器）放行
       if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS: 来源 ${origin} 不被允许`));
+        return callback(null, true);
       }
+      // 拒绝跨域时不能抛异常：抛出的 Error 不是 HttpException，
+      // 会绕过 InterceptorExceptionFilter 直接被 Nest 兜底成 500，
+      // 导致整个接口看起来"服务挂了"。这里只返回 false，即不下发
+      // CORS 响应头，跨域请求由浏览器拦截；同源请求不校验 CORS 响应头，不受影响。
+      console.warn(`[CORS] 已拒绝来源: ${origin}`);
+      return callback(null, false);
     },
     credentials: true,
   });
