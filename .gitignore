@@ -24,3 +24,6 @@ build/
 # 本地工具数据
 .codebuddy/
 .workbuddy/
+
+# 本地文档（不入库）
+docs/
