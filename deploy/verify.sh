@@ -85,6 +85,9 @@ else
   fi
 fi
 
+# 注意：本项会故意带一个非白名单 Origin 请求一次，后端会写一条
+# 「[CORS] 已拒绝来源: https://not-in-whitelist.example.com」到 english-server-error.log，
+# 属于预期输出，不是故障。
 printf '\n[4/6] 非白名单来源回归检查\n'
 code="$(probe_register 'https://not-in-whitelist.example.com')"
 if [ "$code" -ge 500 ] 2>/dev/null; then

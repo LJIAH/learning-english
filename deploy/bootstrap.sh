@@ -14,6 +14,9 @@
 # 可用环境变量覆盖：REPO_DIR BRANCH WEB_ROOT WEB_OWNER PM2_APP OLD_PM2_APP BACKUP_DIR
 #
 # 注意：为了让新进程拿到 3000 端口，会先停掉旧的 pm2 进程，因此有秒级停机。
+#
+# 迁移完成后（web 根里不再有 server/.env）再跑本脚本会被前置检查直接拒绝，
+# 并提示改用 deploy/deploy.sh —— 避免在已经迁好的机器上重复执行迁移。
 
 set -euo pipefail
 
@@ -62,6 +65,13 @@ preflight() {
   printf '    node %s | pnpm %s\n' "$(node -v)" "$(pnpm -v)"
 
   [ -d "$WEB_ROOT" ] || die "找不到 web 根目录 $WEB_ROOT"
+  # 已经迁移过的机器：旧配置已经被 mv 进备份目录，web 根里不再有 server/.env。
+  # 这种情况再跑初始化没有意义，也不是它能处理的，直接把人指到日常发布脚本。
+  if [ ! -f "$WEB_ROOT/server/.env" ] && [ -f "$REPO_DIR/server/.env" ]; then
+    die "看起来已经迁移过了：$REPO_DIR/server/.env 已就位，而 $WEB_ROOT 里已无旧配置（应该已被移入备份目录）。
+  日常发布请用：bash $REPO_DIR/deploy/deploy.sh --deploy
+  只核对线上状态：bash $REPO_DIR/deploy/verify.sh"
+  fi
   [ -f "$WEB_ROOT/server/.env" ] || die "找不到旧配置 $WEB_ROOT/server/.env。这是要沿用的密钥文件，不能重新生成，也不该猜"
   ok "找到旧配置 $WEB_ROOT/server/.env"
 
