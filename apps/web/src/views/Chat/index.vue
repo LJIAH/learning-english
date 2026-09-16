@@ -21,7 +21,8 @@ import { CHAT_URL, sse } from "@/apis/sse";
 const userStore = useUserStore();
 const userId = userStore.user?.id!;
 const list = ref<ChatMessageList>([]);
-const role = ref<ChatRoleType | null>("normal");
+// 默认值与左侧模式列表第一项保持一致
+const role = ref<ChatRoleType | null>("speaking");
 const getRole = async (chatRoleType: ChatRoleType) => {
   // console.log(role);
   role.value = chatRoleType;
