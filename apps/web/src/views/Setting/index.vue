@@ -155,7 +155,7 @@ import {
   type UploadFile,
 } from "element-plus";
 import { onMounted, ref, useTemplateRef, watch } from "vue";
-import avatar from "@/assets/images/avatar/default-avatar.png";
+import avatar from "@/assets/images/avatar/default-avatar.webp";
 import { useUserStore } from "@/stores/user";
 import { updateUser, uploadAvatar } from "@/apis/user";
 import { useAvatar } from "@/hooks/useAvatar";

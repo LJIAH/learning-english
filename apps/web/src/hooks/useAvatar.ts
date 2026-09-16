@@ -1,5 +1,5 @@
 import { uploadUrl } from "@/apis";
-import defaultAvatar from "@/assets/images/avatar/default-avatar.png";
+import defaultAvatar from "@/assets/images/avatar/default-avatar.webp";
 import { useUserStore } from "@/stores/user";
 import { computed } from "vue";
 
