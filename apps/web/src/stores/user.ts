@@ -31,7 +31,8 @@ export const useUserStore = defineStore(
       user.value!.avatar = newInfo.avatar;
       user.value!.bio = newInfo.bio;
       user.value!.isTimingTask = newInfo.isTimingTask;
-      user.value!.timingTaskTime = newInfo.timingTaskTime;
+      // UserUpdate.timingTaskTime 选填（关闭定时任务时为 undefined），用户实体要求 string，用空串兜底
+      user.value!.timingTaskTime = newInfo.timingTaskTime ?? "";
     };
     // 在设置界面默认获取的用户信息
     const getUpdateUserInfo = computed<UserUpdate>(() => {
