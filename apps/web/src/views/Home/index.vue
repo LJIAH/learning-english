@@ -27,6 +27,7 @@
           </button>
           <button
             class="bg-transparent text-indigo-300 border border-indigo-400/50 rounded-full px-6 py-2.5 cursor-pointer text-sm font-medium w-30 h-10 transition-all duration-200 hover:bg-indigo-500/20 hover:text-white active:scale-95"
+            @click="toCourse"
           >
             查看课程
           </button>
@@ -139,6 +140,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, useTemplateRef } from "vue";
+import { useRouter } from "vue-router";
 import TeacherBanner from "./components/TeacherBanner.vue";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -150,6 +152,12 @@ const toStudy = () => {
   openLogin().then(() => {
     console.log("Login opened");
   });
+};
+
+// 跳转到课程列表页
+const router = useRouter();
+const toCourse = () => {
+  router.push("/courses");
 };
 
 gsap.registerPlugin(ScrollTrigger);

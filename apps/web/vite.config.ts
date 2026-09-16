@@ -26,4 +26,12 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  build: {
+    chunkSizeWarningLimit: 500, // 调高阈值
+    rolldownOptions: {
+      output: {
+        codeSplitting: true, // 开启智能分包
+      },
+    },
+  },
 });
