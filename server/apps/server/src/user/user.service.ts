@@ -97,7 +97,7 @@ export class UserService {
       where: { phone: createUserDto.phone },
     });
     if (phoneUser) return this.response.error(null, "手机号已存在");
-    // 2.如果用户传入邮箱并且存在了也不行，说明重复了
+    // 2.邮箱选填：传了邮箱才查重并写入
     if (createUserDto.email) {
       const emailUser = await this.prisma.user.findUnique({
         where: { email: createUserDto.email },
@@ -216,7 +216,14 @@ export class UserService {
       where: { id: user.userId },
     });
     if (!res) return this.response.error(null, "用户不存在");
-    // 2.更新用户信息
+    // 2.开启定时任务时必须确保有邮箱和任务时间（本次传入优先，否则要求库中已有），
+    //   否则学习报告无法投递
+    const email = updateUserDto.email ?? res.email;
+    const timingTaskTime = updateUserDto.timingTaskTime ?? res.timingTaskTime;
+    if (updateUserDto.isTimingTask && (!email || !timingTaskTime)) {
+      return this.response.error(null, "开启定时任务需要先填写邮箱和任务时间");
+    }
+    // 3.更新用户信息
     const updatedUser = await this.prisma.user.update({
       where: { id: res.id },
       data: {

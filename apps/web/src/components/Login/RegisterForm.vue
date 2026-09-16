@@ -68,7 +68,7 @@ import { User, Lock } from "@element-plus/icons-vue";
 import { register } from "@/apis/user";
 import type { UserRegister } from "@en/common/user";
 import md5 from "md5";
-import { ElMessage, type FormInstance } from "element-plus";
+import { ElMessage, type FormInstance, type FormRules } from "element-plus";
 import { useUserStore } from "@/stores/user";
 import { useLogin } from "@/hooks/useLogin";
 
@@ -81,7 +81,7 @@ const form = ref<UserRegister>({
   password: "",
 });
 
-const rules = {
+const rules: FormRules = {
   name: [
     { required: true, message: "请输入用户名", trigger: "blur" },
     { min: 2, max: 10, message: "用户名长度为2-10位", trigger: "blur" },
@@ -94,6 +94,17 @@ const rules = {
       trigger: "blur",
     },
     { min: 11, max: 11, message: "手机号长度为11位", trigger: "blur" },
+  ],
+  email: [
+    {
+      // 选填：未填直接通过，填了才校验格式（与后端正则一致）
+      validator: (rule, value, callback) => {
+        if (!value) return callback();
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return callback();
+        callback(new Error("请输入正确的邮箱格式"));
+      },
+      trigger: "blur",
+    },
   ],
   password: [
     { required: true, message: "请输入密码", trigger: "blur" },

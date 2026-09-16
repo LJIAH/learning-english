@@ -24,14 +24,10 @@ export type ResultUser = Omit<User, "password">;
 // 用户更新
 export type UserUpdate = Pick<
   User,
-  | "name"
-  | "email"
-  | "address"
-  | "avatar"
-  | "bio"
-  | "isTimingTask"
-  | "timingTaskTime"
->;
+  "name" | "email" | "address" | "avatar" | "bio" | "isTimingTask"
+> & {
+  timingTaskTime?: string; // 选填：开启定时任务时才要求有值
+};
 
 // 头像返回的类型
 export type AvatarResult = {

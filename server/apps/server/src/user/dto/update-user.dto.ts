@@ -4,12 +4,15 @@ import {
   IsOptional,
   IsString,
   Length,
+  Matches,
 } from "class-validator";
+import { Transform } from "class-transformer";
 
 /**
  * 更新用户信息请求 DTO。
  * 字段必填性与 @en/common/user 的 UserUpdate 保持一致：
- * name / isTimingTask / timingTaskTime 必填，其余可选。
+ * name / isTimingTask 必填，timingTaskTime / email 等选填，
+ * 开启定时任务所需的邮箱与时间由 service 按开关状态联动校验。
  */
 export class UpdateUserDto {
   @IsString({ message: "用户名必须为字符串" })
@@ -17,8 +20,17 @@ export class UpdateUserDto {
   @Length(2, 20, { message: "用户名长度需为 2-20 个字符" })
   name!: string;
 
+  // 邮箱选填：空串归一成 undefined（表示不更新，避免把库中邮箱覆盖成空串），传了则校验格式
+  @Transform(({ value }) => {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed === "" ? undefined : trimmed;
+    }
+    return value;
+  })
   @IsOptional()
   @IsString({ message: "邮箱必须为字符串" })
+  @Matches(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, { message: "邮箱格式不正确" })
   email?: string | null;
 
   @IsOptional()
@@ -37,7 +49,16 @@ export class UpdateUserDto {
   @IsNotEmpty({ message: "定时任务开关不能为空" })
   isTimingTask!: boolean;
 
+  // 定时任务时间选填：空串归一成 undefined（表示不更新，保留库中原值），
+  // 是否必须有值由 service 结合 isTimingTask 联动校验
+  @Transform(({ value }) => {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed === "" ? undefined : trimmed;
+    }
+    return value;
+  })
+  @IsOptional()
   @IsString({ message: "定时任务时间必须为字符串" })
-  @IsNotEmpty({ message: "定时任务时间不能为空" })
-  timingTaskTime!: string;
+  timingTaskTime?: string | null;
 }

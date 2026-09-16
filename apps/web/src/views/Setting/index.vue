@@ -99,9 +99,10 @@
                   value-format="HH:mm:ss"
                   v-model="form.timingTaskTime"
                   placeholder="请选择定时任务时间"
+                  :disabled="!form.isTimingTask"
                 />
                 <div class="text-xs text-slate-500 mt-3">
-                  tips:只有填写邮箱并且开启定时任务，才能收到每日打卡提醒
+                  tips:开启定时任务需要先填写邮箱，用于接收每日打卡提醒
                 </div>
               </div>
             </el-form-item>
@@ -153,7 +154,7 @@ import {
   type FormRules,
   type UploadFile,
 } from "element-plus";
-import { onMounted, ref, useTemplateRef } from "vue";
+import { onMounted, ref, useTemplateRef, watch } from "vue";
 import avatar from "@/assets/images/avatar/default-avatar.png";
 import { useUserStore } from "@/stores/user";
 import { updateUser, uploadAvatar } from "@/apis/user";
@@ -178,29 +179,38 @@ const rules: FormRules = {
   name: [{ required: true, message: "请输入用户名", trigger: "blur" }],
   email: [
     {
+      // 与定时任务联动：开启时邮箱必填（学习报告的投递地址），关闭时选填；填了则校验格式
       validator: (rule, value, callback) => {
-        const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
-        if (value && regex.test(value)) {
-          callback();
-        } else {
-          callback(new Error("请输入正确的邮箱格式"));
+        if (!value) {
+          if (form.value.isTimingTask) {
+            return callback(
+              new Error("开启定时任务后需要填写邮箱以接收打卡提醒")
+            );
+          }
+          return callback();
         }
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return callback();
+        callback(new Error("请输入正确的邮箱格式"));
       },
-      trigger: "blur",
+      trigger: ["blur", "change"],
     },
   ],
-  isTimingTask: [
-    {
-      required: true,
-      message: "请选择是否开启定时任务",
-      trigger: "change",
-      type: "boolean",
-    },
-  ],
+  // isTimingTask 是开关（恒有 true/false，不存在空值），无需 required 规则
   timingTaskTime: [
-    { required: true, message: "请选择定时任务时间", trigger: "change" },
+    {
+      // 与定时任务开关联动：开启时必选时间，关闭时选填
+      validator: (rule, value, callback) => {
+        if (!value) {
+          if (form.value.isTimingTask) {
+            return callback(new Error("开启定时任务后需要选择任务时间"));
+          }
+          return callback();
+        }
+        callback();
+      },
+      trigger: ["blur", "change"],
+    },
   ],
-  address: [{ required: true, message: "请输入地址", trigger: "blur" }],
 };
 
 const onSave = async () => {
@@ -213,6 +223,15 @@ const onSave = async () => {
     ElMessage.error(res.message);
   }
 };
+// 定时任务开关切换时重新校验邮箱和时间，让「开启需填写」的提示即时出现/消失
+watch(
+  () => form.value.isTimingTask,
+  () => {
+    formRef.value?.validateField("email").catch(() => {});
+    formRef.value?.validateField("timingTaskTime").catch(() => {});
+  }
+);
+
 const onAvatarSelect = async (file: UploadFile) => {
   // form.value.avatar = file.url || URL.createObjectURL(file.raw);
   const formData = new FormData();

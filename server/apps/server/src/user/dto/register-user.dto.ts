@@ -1,4 +1,5 @@
 import { IsNotEmpty, IsOptional, IsString, Length, Matches } from "class-validator";
+import { Transform } from "class-transformer";
 
 /**
  * 注册请求 DTO。
@@ -15,6 +16,15 @@ export class RegisterUserDto {
   @Matches(/^1[3-9]\d{9}$/, { message: "手机号格式不正确" })
   phone!: string;
 
+  // 邮箱选填：@IsOptional 只豁免 null/undefined，空字符串会落到 @Matches 被拦下，
+  // 先用 @Transform 把空串（含纯空白）归一成 undefined，选填语义才成立
+  @Transform(({ value }) => {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed === "" ? undefined : trimmed;
+    }
+    return value;
+  })
   @IsOptional()
   @IsString({ message: "邮箱必须为字符串" })
   @Matches(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, { message: "邮箱格式不正确" })
