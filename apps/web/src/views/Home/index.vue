@@ -1,11 +1,13 @@
 <template>
   <div class="max-w-300 w-full mx-auto mt-10 pb-30 px-6">
     <!-- 🎯 背景区域 -->
-    <div class="relative flex flex-wrap justify-between rounded-[20px] p-9">
+    <div
+      class="relative flex flex-wrap justify-between rounded-[20px] p-9 min-h-110"
+    >
       <div
         class="absolute inset-0 bg-linear-to-r from-gray-900 via-gray-900 to-gray-900/70 rounded-[20px]"
       />
-      <div class="relative z-8 p-8">
+      <div class="relative z-8 p-8 flex flex-col justify-center">
         <span
           class="text-white text-1xl bg-indigo-500/20 rounded-[100px] px-4 py-2"
           >坚持5天打卡学习</span
@@ -30,8 +32,8 @@
           </button>
         </div>
       </div>
-      <div class="relative z-8 p-8 flex-1">
-        <Hologram />
+      <div class="relative z-8 flex-1 -my-9 -mr-9">
+        <TeacherBanner />
       </div>
     </div>
 
@@ -137,7 +139,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, useTemplateRef } from "vue";
-import Hologram from "./components/Hologram.vue";
+import TeacherBanner from "./components/TeacherBanner.vue";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useLogin } from "../../hooks/useLogin";
