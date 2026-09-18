@@ -4,6 +4,8 @@
       src="/images/teacher-home.webp"
       alt="AI 英语外教"
       draggable="false"
+      fetchpriority="high"
+      decoding="async"
       class="absolute inset-x-0 -top-10 h-[calc(100%+2.5rem)] w-full object-cover object-top-right breathe"
     />
     <!-- 左侧渐变遮罩，使图片自然融入 banner 深色背景 -->

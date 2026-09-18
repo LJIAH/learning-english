@@ -82,6 +82,8 @@
             <img
               :src="imageSrc(item.url)"
               :alt="item.name"
+              loading="lazy"
+              decoding="async"
               class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
             />
             <div

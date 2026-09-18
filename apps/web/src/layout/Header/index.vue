@@ -52,7 +52,13 @@
           <div
             class="flex items-center gap-2 border-l cursor-pointer border-gray-200 pl-4 shrink-0"
           >
-            <img class="w-10 h-10 rounded-full ml-2 mr-2" :src="avatar" />
+            <img
+              class="w-10 h-10 rounded-full ml-2 mr-2"
+              :src="avatar"
+              width="40"
+              height="40"
+              decoding="async"
+            />
             <span class="text-sm font-bold">{{
               userStore.getUser?.name ?? "游客"
             }}</span>
