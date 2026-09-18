@@ -1,11 +1,12 @@
 <template>
-  <Transition name="fade">
+  <!-- appear：组件改为按需挂载（App.vue 中 v-if），需要它保证首次渲染仍播放入场动画 -->
+  <Transition name="fade" appear>
     <div
       v-if="isShow"
       class="fixed top-0 left-0 w-full h-full z-40 bg-black opacity-30 blur-sm"
     ></div>
   </Transition>
-  <Transition name="modal">
+  <Transition name="modal" appear>
     <div
       v-if="isShow"
       class="fixed inset-0 shadow-lg z-50 p-30 pt-20"
@@ -48,23 +49,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount } from "vue";
+import { ref, watch, onBeforeUnmount } from "vue";
 import axios from "axios";
 import { getWordBookList } from "@/apis/word-book";
 import { Search } from "@element-plus/icons-vue";
 import type { Word } from "@en/common/word";
 import { ElMessage } from "element-plus";
+import { useSearch } from "@/hooks/useSearch";
 
-const isShow = ref(false);
+// 弹窗显隐与 Ctrl+F / Esc 快捷键由 useSearch 统一管理（模块级监听，组件可按需挂载）
+const { isShowSearch: isShow, closeSearch } = useSearch();
+
 const search = ref("");
 const wordList = ref<Word[]>([]);
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let abortController: AbortController | null = null;
 
 const close = () => {
-  isShow.value = false;
   search.value = "";
   wordList.value = [];
+  closeSearch();
 };
 
 const getList = async () => {
@@ -96,20 +100,6 @@ watch(search, () => {
   }, 300);
 });
 
-const handleKeydown = (event: KeyboardEvent) => {
-  if (event.ctrlKey && event.key === "f") {
-    event.preventDefault();
-    isShow.value = true;
-    // 隐藏滚动条
-    document.body.style.overflow = "hidden";
-  }
-  if (event.key === "Escape") {
-    close();
-    // 恢复滚动条
-    document.body.style.overflow = "auto";
-  }
-};
-
 const copyWord = (word: Word) => {
   try {
     navigator.clipboard.writeText(word.word); //localhost  / https
@@ -119,12 +109,7 @@ const copyWord = (word: Word) => {
   }
 };
 
-onMounted(() => {
-  window.addEventListener("keydown", handleKeydown);
-});
-
 onBeforeUnmount(() => {
-  window.removeEventListener("keydown", handleKeydown);
   if (debounceTimer) clearTimeout(debounceTimer);
   abortController?.abort();
 });

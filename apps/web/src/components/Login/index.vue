@@ -1,12 +1,13 @@
 <template>
-  <Transition name="backdrop">
+  <!-- appear：组件改为按需挂载（App.vue 中 v-if），需要它保证首次渲染仍播放入场动画 -->
+  <Transition name="backdrop" appear>
     <div
       v-if="isShowLogin"
       @click.self="closeLogin"
       class="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
     ></div>
   </Transition>
-  <Transition name="modal">
+  <Transition name="modal" appear>
     <div
       v-if="isShowLogin"
       class="fixed inset-30 flex items-center justify-center z-50"

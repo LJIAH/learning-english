@@ -1,14 +1,17 @@
-import { io, type Socket } from "socket.io-client";
+import type { Socket } from "socket.io-client";
 import { socketUrl } from "@/apis";
 import { useUserStore } from "@/stores/user";
 let socket: Socket | null = null;
 export const useSocket = () => {
   const userStore = useUserStore();
   //连接socket
-  const connect = () => {
+  const connect = async () => {
     const userId = userStore.user?.id;
     if (!userId) return; //如果没有userid不可以连接
     if (socket) return; //如果已经连接了就不要在重复连接了
+    // socket.io-client 只有登录后才会用到，动态加载把它移出首屏包
+    const { io } = await import("socket.io-client");
+    if (socket) return; // 动态加载期间可能已被其它调用方连上
     socket = io(socketUrl, {
       transports: ["websocket"],
       autoConnect: true, //是否自动连接

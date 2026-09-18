@@ -7,11 +7,14 @@ import { logout as logoutApi } from "@/apis/user";
 const isShowLogin = ref(false);
 let pendingResolve: (() => void) | null = null;
 let pendingReject: (() => void) | null = null;
+/** 当前等待中的登录流程 Promise：重复调用 openLogin 时复用它 */
+let pendingPromise: Promise<void> | null = null;
 
 // 清理 pending 状态，不触发任何回调
 const clearPending = () => {
   pendingResolve = null;
   pendingReject = null;
+  pendingPromise = null;
 };
 
 const onEscape = (e: KeyboardEvent) => {
@@ -40,10 +43,15 @@ export const useLogin = () => {
   const openLogin = (): Promise<void> => {
     if (userStore.getUser) return Promise.resolve();
     isShowLogin.value = true;
-    return new Promise<void>((resolve, reject) => {
+    // 已经在等待中的登录流程（例如弹窗 chunk 仍在加载时用户又点了一次）：
+    // 复用同一个 Promise。否则 pendingResolve 会被覆盖，
+    // 先前调用方的 await 将永远不会返回
+    if (pendingPromise) return pendingPromise;
+    pendingPromise = new Promise<void>((resolve, reject) => {
       pendingResolve = resolve;
       pendingReject = reject;
     });
+    return pendingPromise;
   };
 
   // 关闭弹窗时自动判断：已登录则 resolve，未登录则由 watch(isShowLogin) reject

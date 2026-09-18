@@ -54,7 +54,7 @@
     <!-- 📊 数据统计区域 -->
     <div
       ref="statsSection"
-      class="mt-16 py-12 flex flex-wrap items-center justify-between"
+      class="py-12 flex flex-wrap items-center justify-between"
     >
       <template v-for="(item, index) in stats" :key="item.label">
         <div class="flex-1 text-center">
@@ -211,9 +211,11 @@ let disposed = false;
 
 /** 动画初始化失败时的兜底：直接展示内容，避免元素停留在隐藏态 */
 const revealAll = () => {
-  homeRoot.value?.querySelectorAll<HTMLElement>(".home-reveal").forEach((el) => {
-    el.style.opacity = "1";
-  });
+  homeRoot.value
+    ?.querySelectorAll<HTMLElement>(".home-reveal")
+    .forEach((el) => {
+      el.style.opacity = "1";
+    });
 };
 
 const initProject = async () => {
