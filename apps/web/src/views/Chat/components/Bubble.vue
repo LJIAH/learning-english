@@ -1,57 +1,12 @@
 <template>
   <div class="flex-1 h-187.5 p-5 bg-purple-50 flex flex-col">
-    <div class="flex-1 overflow-y-auto">
-      <div v-for="(item, index) in list" :key="index">
-        <div
-          class="flex justify-end items-start gap-4 mt-5 mb-5 mr-5"
-          v-if="item.role === 'human'"
-        >
-          <div
-            class="text-sm text-white max-w-[80%] rounded-lg p-2 bg-blue-500 shadow-md"
-          >
-            {{ item.content }}
-          </div>
-          <div>
-            <el-avatar :src="avatar" :size="35" />
-          </div>
-        </div>
-        <div class="flex justify-start items-start gap-4 mt-5 mb-5" v-else>
-          <div><el-avatar :size="35">AI</el-avatar></div>
-          <div>
-            <!-- 思考过程折叠面板 -->
-            <div
-              v-if="item.role === 'ai' && item.reasoning"
-              class="max-w-[80%] mb-2 border border-gray-200 rounded-lg bg-gray-50 overflow-hidden"
-            >
-              <div
-                @click="toggleReasoning(index)"
-                class="flex items-center justify-between px-2 py-1 cursor-pointer hover:bg-gray-100 transition-colors"
-              >
-                <span class="text-xs text-gray-500">🧠 思考过程</span>
-                <el-icon
-                  size="12"
-                  :class="isReasoningCollapsed[index] ? 'rotate-[-90deg]' : ''"
-                  class="transition-transform duration-200 text-gray-400"
-                >
-                  <arrow-down />
-                </el-icon>
-              </div>
-              <div
-                v-show="!isReasoningCollapsed[index]"
-                class="text-[12px] text-gray-500 p-2 border-t border-gray-200 whitespace-pre-wrap"
-              >
-                {{ item.reasoning }}
-              </div>
-            </div>
-            <div
-              v-if="item.role === 'ai' && item.content !== ''"
-              class="text-sm text-gray-700 max-w-[80%] bg-white rounded-lg p-3 deepseek-markdown"
-              v-html="parseMarkdown(item.content)"
-            />
-          </div>
-        </div>
-      </div>
-      <div ref="chatRef"></div>
+    <div ref="scrollContainer" class="flex-1 overflow-y-auto">
+      <MessageItem
+        v-for="item in list"
+        :key="item.key"
+        :item="item"
+        :avatar="avatar"
+      />
     </div>
     <div class="flex p-5 border-t border-gray-200 box-border flex-col gap-3">
       <!-- 功能选项 -->
@@ -127,20 +82,30 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatMessageList } from "@en/common/chat";
-import { nextTick, ref, useTemplateRef, watch } from "vue";
-import { ArrowDown } from "@element-plus/icons-vue";
+import type { ChatDisplayList } from "../types";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  ref,
+  useTemplateRef,
+  watch,
+} from "vue";
 import { Position, Microphone } from "@element-plus/icons-vue";
-import { marked } from "marked";
 import "@/assets/css/deep-seek.css";
+import MessageItem from "./MessageItem.vue";
 import { useAvatar } from "@/hooks/useAvatar";
 import { useVoiceToText } from "@/hooks/useVoiceToText";
-import { sanitizeHtml } from "@/utils/sanitize";
 
 const { avatar } = useAvatar();
 const { isListening, finalText, interimText, error, start, stop, reset } =
   useVoiceToText();
 
+const props = defineProps<{
+  list: ChatDisplayList;
+}>();
+
+const message = ref<string>("");
 // 语音识别结果实时同步到输入框
 watch([finalText, interimText], () => {
   // console.log('finalText', finalText.value, 'interimText', interimText.value);
@@ -158,42 +123,60 @@ const toggleVoice = () => {
 const deepThink = ref(false);
 const webSearch = ref(false);
 const emits = defineEmits(["onSendMessage"]);
-const chatRef = useTemplateRef<HTMLElement>("chatRef");
 
-const props = defineProps<{
-  list: ChatMessageList;
-}>();
+// ------------------------------------------------------------------
+// 滚动跟随
+// 旧实现是每个 SSE chunk 都调一次 scrollIntoView({behavior:'smooth'})，
+// 高频调用会让平滑滚动动画不断重启，既卡又浪费；现在改为：
+//   1) 节流 100ms
+//   2) 直接对滚动容器赋值 scrollTop（瞬时跟随，流式场景本就不适合平滑动画）
+//   3) 用户主动上滑查看历史时不再把视图拽回底部
+// ------------------------------------------------------------------
+const scrollContainer = useTemplateRef<HTMLDivElement>("scrollContainer");
+/** 距底部小于该阈值视为“正在跟随最新内容” */
+const NEAR_BOTTOM_PX = 80;
+/** 滚动节流间隔（ms） */
+const SCROLL_THROTTLE_MS = 100;
+let scrollLockTimer: ReturnType<typeof setTimeout> | null = null;
 
-// 思考过程折叠状态：true=折叠，false=展开
-const isReasoningCollapsed = ref<Record<number, boolean>>({});
-
-const toggleReasoning = (index: number) => {
-  isReasoningCollapsed.value[index] = !isReasoningCollapsed.value[index];
+const isNearBottom = () => {
+  const el = scrollContainer.value;
+  if (!el) return true;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
 };
 
+const scrollToBottom = (smooth = false) => {
+  if (scrollLockTimer !== null) return;
+  scrollLockTimer = setTimeout(() => {
+    scrollLockTimer = null;
+  }, SCROLL_THROTTLE_MS);
+  const el = scrollContainer.value;
+  if (!el) return;
+  el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+};
+
+// 新增消息（发送 / 切换会话拉取历史）：无论当前在哪个位置，都滚到底部
 watch(
-  () => props.list,
+  () => props.list.length,
   () => {
-    props.list.forEach((item, index) => {
-      if (item.role === "ai" && item.reasoning) {
-        if (item.content && item.content !== "") {
-          // 已有正式回复内容，说明思考结束，自动折叠
-          isReasoningCollapsed.value[index] = true;
-        } else {
-          // 只有 reasoning 没有 content，说明正在思考，自动展开
-          isReasoningCollapsed.value[index] = false;
-        }
-      }
-    });
-    nextTick(() => {
-      chatRef.value?.scrollIntoView({
-        behavior: "smooth",
-      });
-    });
+    nextTick(() => scrollToBottom(true));
   },
-  { deep: true },
 );
-const message = ref<string>("");
+
+// 最后一条消息内容增长（流式输出）：只在用户本来就贴着底部时才跟随
+const lastMessageLength = computed(() => {
+  const last = props.list[props.list.length - 1];
+  return last ? last.content.length + (last.reasoning?.length ?? 0) : 0;
+});
+watch(lastMessageLength, () => {
+  // pre-flush 阶段读取的滚动位置是“内容更新前”的，正是需要的判断时机
+  if (isNearBottom()) nextTick(() => scrollToBottom());
+});
+
+onBeforeUnmount(() => {
+  if (scrollLockTimer !== null) clearTimeout(scrollLockTimer);
+});
+
 const isSending = ref(false);
 const sendMessage = () => {
   if (!message.value || isSending.value) return;
@@ -205,10 +188,5 @@ const sendMessage = () => {
   setTimeout(() => {
     isSending.value = false;
   }, 1000);
-};
-const parseMarkdown = (markdown: string) => {
-  if (!markdown) return "";
-  // marked 解析后再用 DOMPurify 净化，防止 AI 返回的恶意脚本触发 XSS
-  return sanitizeHtml(marked.parse(markdown) as string);
 };
 </script>
