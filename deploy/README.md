@@ -117,6 +117,60 @@ bash deploy/verify.sh               # 只自检
 
 改完一律 `nginx -t && nginx -s reload`，并留一份带时间戳的备份。
 
+### 建议调整：长缓存 + 压缩（需在服务器执行）
+
+现状有两个可优化点（配置在服务器上，不在仓库里）：
+
+1. **`js|css` 只缓存 12h**：Vite 产物文件名带 content hash（如 `index-B7QFEdu3.js`），内容一变文件名就变，可以放心长期缓存；12h 会让老用户反复回来发条件请求。
+2. **未确认 gzip/brotli 是否开启**：首屏主包原始体积约 336 KB，开启压缩后约 121 KB。若压缩没开，打包侧的优化会被传输层全部吃掉。
+
+建议新增一个 `extension/english.kevy.top/cache.conf`（或并入现有文件），要点：
+
+```nginx
+# 1) 压缩（宝塔通常在全局 nginx.conf 已开 gzip，先用下方验证命令确认）
+gzip on;
+gzip_vary on;
+gzip_comp_level 6;
+gzip_min_length 1024;
+gzip_proxied any;
+gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+# 2) 带 hash 的静态产物：1 年 + immutable
+location ~* ^/assets/.*\.(js|css|png|jpe?g|webp|svg|ico|woff2?)$ {
+    expires 1y;
+    add_header Cache-Control "public, max-age=31536000, immutable";
+}
+
+# 3) public/images 下的图片（文件名不带 hash，用较短缓存）
+location ^~ /images/ {
+    expires 30d;
+    add_header Cache-Control "public, max-age=2592000";
+}
+
+# 4) 入口 HTML 不缓存：发版后立刻拿到新的资源引用
+location = /index.html {
+    add_header Cache-Control "no-cache, no-store, must-revalidate";
+    expires -1;
+}
+```
+
+`location ^~ /images/` 与 `minio.conf` 里的 `^~ /course/`、`^~ /avatar/` 路径不同，不冲突。
+
+**先验证再改**：
+
+```bash
+# 1. 当前是否已开压缩：响应头里有没有 content-encoding: gzip
+curl -sI -H "Accept-Encoding: gzip" https://english.kevy.top/ | grep -iE "content-encoding|cache-control"
+# 2. 取一个真实产物文件名再验证静态资源
+curl -s https://english.kevy.top/ | grep -o '/assets/[^"]*\.js' | head -1
+curl -sI -H "Accept-Encoding: gzip" "https://english.kevy.top/<上一步的文件名>" | grep -iE "content-encoding|cache-control|content-length"
+```
+
+**改动约定（与仓库既有约定一致）**：改前 `cp <conf> <conf>.bak.$(date +%Y%m%d%H%M%S)` 备份 → 改后 `nginx -t && nginx -s reload` → 出问题用备份回滚并 reload。第 4 条（HTML 不缓存）是配合第 2 条的关键：`deploy.sh` 用 `rsync -a --delete` 同步前端，`assets/` 里的旧文件会被删除，若 HTML 被缓存，用户可能长时间拿着指向旧 chunk 的页面。
+
+> 可选：想省掉 nginx 运行时压缩的 CPU，可在构建期生成预压缩文件（如 `vite-plugin-compression2` 产出 `.gz`）并开启 `gzip_static on;`。当前首屏 JS 约 336 KB，运行时压缩开销可忽略，先用上面的方案即可。
+
+
 ## AI 服务（english-ai）
 
 `server/apps/ai` 与 `server/apps/server` 是同一个 nest 项目（`server/nest-cli.json`）下的两个应用，分别监听 3001 / 3000，由 `ecosystem.config.js` 一起交给 pm2 管理，日常发布走同一个 `deploy.sh`。
