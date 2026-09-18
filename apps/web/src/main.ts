@@ -5,18 +5,17 @@ import { createPinia } from "pinia";
 import App from "./App.vue";
 import router from "./router";
 import "./assets/base.css";
-import ElementPlus from "element-plus";
-import "element-plus/dist/index.css";
+// Element Plus 已改为按需引入（见 vite.config.ts 中的 unplugin 配置）：
+// - 模板里的 el-* 组件及其样式由 Components 插件自动注入
+// - 下面只为「服务式 API」显式补齐样式（组件本身在代码里是显式 import 的）
+import "element-plus/es/components/message/style/css";
+import "element-plus/es/components/message-box/style/css";
 import piniaPluginPersistedstate from "pinia-plugin-persistedstate";
-import zhCn from "element-plus/es/locale/lang/zh-cn";
 
 const app = createApp(App);
 const pinia = createPinia();
 pinia.use(piniaPluginPersistedstate);
 app.use(pinia);
-app.use(ElementPlus, {
-  locale: zhCn,
-});
 app.directive("focus", vFocus);
 app.directive("safe-html", vSafeHtml);
 app.use(router);
