@@ -9,7 +9,10 @@
     "minio": "cd ../minio && start.cmd",
     "ngrok": "cd ../ngrok && start.cmd",
     "natapp": "cd ../natapp && run_natapp.bat",
-    "dev": "concurrently -n minio,natapp,app \"pnpm minio\" \"pnpm natapp\" \"pnpm all\""
+    "dev": "concurrently -n minio,natapp,app \"pnpm minio\" \"pnpm natapp\" \"pnpm all\"",
+    "test:e2e": "pnpm --filter @en/web test:e2e",
+    "test:e2e:prod": "pnpm --filter @en/web test:e2e:prod",
+    "test:e2e:report": "pnpm --filter @en/web test:e2e:report"
   },
   "devDependencies": {
     "concurrently": "^10.0.3"

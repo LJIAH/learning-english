@@ -30,6 +30,12 @@ build/
 .codebuddy/
 .workbuddy/
 
+# Playwright 运行产物（报告/trace/截图）与 playwright-cli 快照
+test-results/
+playwright-report/
+blob-report/
+.playwright-cli/
+
 # 本地文档（不入库）
 docs/
 TODO/
