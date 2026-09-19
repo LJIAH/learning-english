@@ -100,6 +100,27 @@ bash deploy/verify.sh               # 只自检
 - `--rollback` 只回滚代码，**不回滚数据库**：`prisma migrate deploy` 只向前应用迁移，没有自动反向迁移。回滚前要确认那次发布没有带不可逆的 schema 变更；库与当前代码不一致时 `verify.sh` 的第 6 项会报出来
 - 同步前端用 `rsync -a --delete`，并排除 `.user.ini` / `.htaccess` / `.well-known/`，避免删掉宝塔和证书校验文件
 
+## 发布后冒烟测试
+
+发布链路的验证分两层（互补，不能互相替代）：
+
+**① 服务端自检（自动，服务器上）**：`deploy.sh` 最后一步自动执行 `deploy/verify.sh`——6 项只读检查（端口、接口探针、CORS 白名单一致性、非白名单回归、AI 应用就绪、迁移与仓库一致）；`VERIFY_TRACKER=1 bash deploy/verify.sh` 还会把 tracker 的 UV → event 链路真实走一遍。覆盖「服务活着、接口通、配置一致」，**不覆盖浏览器里的 UI 行为**。
+
+**② 浏览器级关键路径冒烟（手动，本机）**：
+
+```bash
+# 本机仓库根目录执行；一次性前提：已装 Chromium
+#   pnpm --filter @en/web exec playwright install chromium
+pnpm test:e2e:prod     # build + vite preview(:4173)，用生产产物跑 4 条关键路径用例
+pnpm test:e2e:report   # 查看 HTML 报告（失败时看现场）
+```
+
+覆盖范围（`apps/web/e2e/`，共 4 条）：首页可打开（冒烟）、未登录点「立即学习」→ 弹登录且 URL 不变、已登录点「立即学习」→ 直进 `/chat`、取消登录（Esc）→ 弹窗关闭且无未处理 Promise 拒绝。用例**不依赖后端**（登录态由 fixture 在页面脚本执行前本地注入，只断言 UI 行为），后端未起也能跑。
+
+定位说明：它验证的是「与生产同构的构建产物」（同一条构建配方），适合作为发布前本机最后一道防线；发布后出问题时也可用它快速区分「代码问题 vs 环境/部署问题」——本机产物全绿而线上异常时，先查部署链路，而不是先怀疑前端代码。
+
+**③ 可选扩展（尚未实现）**：「本机对线上域名（https://english.kevy.top）直接跑同一套用例」需要给 `apps/web/playwright.config.ts` 加一个外部基址模式（例如 `E2E_BASE_URL`：设置时 baseURL 指向该地址、且不启动 webServer），约 5 行改动；需要时再加。
+
 ## nginx 配置（现状）
 
 站点配置 `/www/server/panel/vhost/nginx/html_english.kevy.top.conf`：
