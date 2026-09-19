@@ -11,12 +11,7 @@
     "natapp": "cd ../natapp && run_natapp.bat",
     "dev": "concurrently -n minio,natapp,app \"pnpm minio\" \"pnpm natapp\" \"pnpm all\""
   },
-  "dependencies": {
-    "dayjs": "^1.11.21",
-    "md5": "^2.3.0"
-  },
   "devDependencies": {
-    "@types/md5": "^2.3.6",
     "concurrently": "^10.0.3"
   }
 }
