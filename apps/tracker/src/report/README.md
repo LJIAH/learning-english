@@ -62,7 +62,7 @@ export const reportFetch = async (url: string, body: any) => {
 - **`keepalive` 也有体积限制**：一般约 64KB，超过同样会被截断或拒绝。
 - **相对 sendBeacon 开销略大**：需要建立完整 fetch 流程，且等待响应可能轻微影响跳转。
 - **异步等待响应**：若服务端返回慢，可能阻塞后续逻辑（或导致页面卸载前未完成）。
-- **错误未处理**：当前实现没有 `try/catch`，`response.json()` 失败会抛异常；且未判断 `response.ok`。
+- **错误需自行兜底**：非 2xx 或非 JSON 响应要显式处理（当前实现已 `try/catch` + `response.ok` 判空，失败静默返回 `null`）。
 
 ---
 

@@ -4,13 +4,20 @@ export const report = async (url: string, body: any) => {
 };
 
 export const reportFetch = async (url: string, body: any) => {
-  const response = await fetch(url, {
-    method: "POST",
-    body: JSON.stringify(body),
-    keepalive: true,
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-  return response.json();
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      body: JSON.stringify(body),
+      keepalive: true,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    // 网关异常（如 502）时响应体不是 JSON，需显式兜底
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    // 上报是旁路能力：任何失败都静默降级，绝不向宿主页面抛异常
+    return null;
+  }
 };

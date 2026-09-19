@@ -17,11 +17,17 @@ export class Tracker {
     this.readyPromise = this.init();
   }
   protected async init() {
-    this.visitorId = await getFingerprint();
-    reportEvent(this.visitorId);
-    reportError(this.visitorId);
-    reportPv(this.visitorId);
-    reportPerformance(this.visitorId);
+    try {
+      this.visitorId = await getFingerprint();
+      // UV 注册失败（无 visitorId）时跳过后续上报，避免发送无归属的埋点数据
+      if (!this.visitorId) return;
+      reportEvent(this.visitorId);
+      reportError(this.visitorId);
+      reportPv(this.visitorId);
+      reportPerformance(this.visitorId);
+    } catch {
+      // 埋点是旁路能力：初始化失败静默降级，readyPromise 永不 reject
+    }
   }
   // 设置用户id,用于uv统计
   setUserId(userId: string) {

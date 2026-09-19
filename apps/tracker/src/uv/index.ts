@@ -25,5 +25,5 @@ export const getFingerprint = async () => {
   };
   const url = config.baseUrl + config.uv.api;
   const res = await reportFetch(url, body);
-  return res.data;
+  return res?.data;
 };
