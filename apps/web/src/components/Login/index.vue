@@ -14,6 +14,9 @@
     >
       <div
         class="relative w-250 h-160 bg-white rounded-2xl shadow-2xl overflow-hidden flex"
+        role="dialog"
+        aria-modal="true"
+        aria-label="登录/注册"
       >
         <!-- 关闭按钮 -->
         <button

@@ -148,15 +148,19 @@ import TeacherBanner from "./components/TeacherBanner.vue";
 import { useLogin } from "../../hooks/useLogin";
 
 const { openLogin } = useLogin();
+const router = useRouter();
 
-const toStudy = () => {
-  openLogin().then(() => {
-    console.log("Login opened");
-  });
+// 「立即学习」：未登录先弹登录，登录成功后进入 AI 对话
+const toStudy = async () => {
+  try {
+    await openLogin(); // 已登录则立即返回；未登录则等登录完成
+  } catch {
+    return; // 用户取消登录（Esc / 点遮罩），不跳转
+  }
+  router.push("/chat");
 };
 
 // 跳转到课程列表页
-const router = useRouter();
 const toCourse = () => {
   router.push("/courses");
 };
