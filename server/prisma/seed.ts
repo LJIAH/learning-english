@@ -104,9 +104,9 @@ async function main() {
     );
   }
   for (const item of data) {
-    const file = fs.readFileSync(`./prisma/assets/${item.value}.png`);
-    await minio.putObject(bucket, `${item.value}.png`, file, file.length, {
-      "Content-Type": "image/png",
+    const file = fs.readFileSync(`./prisma/assets/${item.value}.webp`);
+    await minio.putObject(bucket, `${item.value}.webp`, file, file.length, {
+      "Content-Type": "image/webp",
     });
     await prisma.course.create({
       data: {
@@ -114,11 +114,11 @@ async function main() {
         value: item.value,
         description: item.description,
         teacher: item.teacher,
-        url: `/course/${item.value}.png`,
+        url: `/course/${item.value}.webp`,
         price: item.price,
       },
     });
-    console.log(`${item.value}.png 上传成功`);
+    console.log(`${item.value}.webp 上传成功`);
   }
   await prisma.$disconnect();
 }
