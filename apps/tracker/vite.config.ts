@@ -7,6 +7,8 @@ export default defineConfig({
     dts({
       outDirs: "dist",
       entryRoot: ".",
+      // 用例留在 tsconfig 的 include 里（IDE 才能解析 @ 别名），但不产出声明文件
+      exclude: ["node_modules/**", "**/*.spec.ts"],
     }),
   ],
   build: {

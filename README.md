@@ -19,7 +19,7 @@ AI 驱动的英语学习平台，pnpm monorepo：Vue 3 前端 + NestJS 双后端
 | AI | LangChain + DeepSeek（createAgent）、LangGraph PostgresSaver（按 `userId-role` 隔离会话检查点）、博查联网搜索 |
 | 基础设施 | MinIO（对象存储）、支付宝沙箱、QQ SMTP（邮件）、nginx + pm2（生产） |
 | 埋点 SDK | FingerprintJS、ua-parser-js、web-vitals（Vite lib 模式打包） |
-| 工程 | pnpm workspace、TypeScript、ESLint + Prettier |
+| 工程 | pnpm workspace、TypeScript、ESLint + Prettier、Vitest + jsdom（埋点 SDK 单测）、Playwright（E2E） |
 
 ## 目录结构
 
@@ -27,7 +27,7 @@ AI 驱动的英语学习平台，pnpm monorepo：Vue 3 前端 + NestJS 双后端
 .
 ├── apps/
 │   ├── web/                 # @en/web 前端（Vue 3 + Vite），dev 端口 8080
-│   └── tracker/             # @en/tracker 埋点 SDK（Vite lib 模式，产物 dist/）
+│   └── tracker/             # @en/tracker 埋点 SDK（Vite lib 模式，产物 dist/；Vitest 单测）
 ├── packages/
 │   ├── common/              # @en/common 共享 TS 类型（chat/course/learn/pay/tracker/user/word，直接源码导出）
 │   └── config/              # @en/config 端口常量（web 8080 / server 3000 / ai 3001）
@@ -112,6 +112,7 @@ pnpm minio     # 启动仓库外同级目录 ../minio/start.cmd
 pnpm natapp    # 启动 ../natapp/run_natapp.bat（内网穿透，供支付宝异步回调访问本机）
 pnpm ngrok     # 启动 ../ngrok/start.cmd（natapp 的替代方案）
 pnpm dev       # 一键：minio + natapp + all
+pnpm test:unit # 埋点 SDK 单元测试（Vitest + jsdom，用例与源码同目录）
 ```
 
 > `minio` / `natapp` / `ngrok` 依赖仓库**同级目录**下已存在的对应工具目录。
