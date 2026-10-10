@@ -5,24 +5,14 @@ import Home from "@/views/Home";
 import WordBook from "@/views/WordBook";
 import Course from "@/views/Course";
 import Learn from "@/views/Course/Learn";
-
 /**
- * 设置页懒加载。
- *
- * 它是全站唯一使用 Ant Design 的页面（表单校验手写等于重造轮子）。
- * AntD 约 126 kB gzip，隔离出去后不进首屏包；
+ * 两个重依赖页面做懒加载，避免拖累首屏：
+ *   - Setting：全站唯一用 Ant Design 的页面（表单校验手写等于重造轮子）
+ *   - Chat：额外引入 marked + dompurify（约 26 kB gzip）
  * 首屏空闲时再由 App.tsx 预取，用户点进来时 chunk 已在缓存里。
  */
 const Setting = lazy(() => import("@/views/Setting"));
-
-/** 尚未迁移的页面占位，保证导航可用、不白屏 */
-function Placeholder({ title }: { title: string }) {
-  return (
-    <div className="max-w-300 mx-auto mt-10 px-6 text-center text-gray-400">
-      {title} · 待实现
-    </div>
-  );
-}
+const Chat = lazy(() => import("@/views/Chat"));
 
 /**
  * 路由 —— 对应 Vue 版的 router/index.ts。
@@ -45,7 +35,14 @@ export const router = createBrowserRouter([
           </Suspense>
         ),
       },
-      { path: "chat", element: <Placeholder title="AI 对话" /> },
+      {
+        path: "chat",
+        element: (
+          <Suspense fallback={null}>
+            <Chat />
+          </Suspense>
+        ),
+      },
       { path: "courses", element: <Course /> },
       { path: "courses/learn/:courseId/:title", element: <Learn /> },
       { path: "*", element: <Navigate to="/" replace /> },
