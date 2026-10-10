@@ -161,10 +161,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div
-      ref={rootRef}
-      className="max-w-300 w-full mx-auto mt-10 pb-30 px-6"
-    >
+    <div ref={rootRef} className="max-w-300 w-full mx-auto mt-10 pb-30 px-6">
       {/* 背景区域 */}
       <div className="relative flex flex-wrap justify-between rounded-[20px] p-9 min-h-110">
         <div className="absolute inset-0 bg-linear-to-r from-gray-900 via-gray-900 to-gray-900/70 rounded-[20px]" />

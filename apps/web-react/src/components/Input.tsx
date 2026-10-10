@@ -1,7 +1,4 @@
-import type {
-  InputHTMLAttributes,
-  TextareaHTMLAttributes,
-} from "react";
+import type { InputHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 /** 对应 el-input —— Tailwind 手写 */
 export function Input({

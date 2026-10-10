@@ -16,6 +16,7 @@
     "test:e2e:report": "pnpm --filter @en/web test:e2e:report"
   },
   "devDependencies": {
-    "concurrently": "^10.0.3"
+    "concurrently": "^10.0.3",
+    "prettier": "^3.8.4"
   }
 }

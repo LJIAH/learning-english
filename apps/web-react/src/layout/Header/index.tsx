@@ -52,7 +52,8 @@ export default function Header() {
   useEffect(() => {
     if (!showProfile) return;
     const onPointerDown = (e: MouseEvent) => {
-      if (!profileRef.current?.contains(e.target as Node)) setShowProfile(false);
+      if (!profileRef.current?.contains(e.target as Node))
+        setShowProfile(false);
     };
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);

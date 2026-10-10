@@ -138,7 +138,8 @@ const RAW: Omit<Word, "createdAt" | "updatedAt">[] = [
     id: "11",
     word: "adapt",
     phonetic: "/əˈdæpt/",
-    definition: "to change your behaviour in order to deal with a new situation",
+    definition:
+      "to change your behaviour in order to deal with a new situation",
     translation: "<p>v. 适应；改编</p>",
     pos: "v.",
     gk: true,
