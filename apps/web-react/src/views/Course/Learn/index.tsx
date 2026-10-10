@@ -4,6 +4,7 @@ import { Eye, EyeOff, Play } from "lucide-react";
 import type { Word } from "@en/common/word";
 import { getWordList, saveWordMaster } from "@/apis/learn";
 import { useAudio } from "@/hooks/useAudio";
+import { toast } from "@/stores/toast";
 import { useUserStore } from "@/stores/user";
 
 interface WordItem {
@@ -93,8 +94,7 @@ export default function Learn() {
 
   const pageNext = () => {
     if (wordList.some((item) => !item.isTrue)) {
-      // TODO: 接入 UI 层后替换为 toast「请先输入正确」
-      console.warn("[learn] 请先输入正确");
+      toast.error("请先输入正确");
       return;
     }
     setCurrentIndex((i) => i + 1);
@@ -155,8 +155,7 @@ export default function Learn() {
     }
   };
 
-  const ringOffset =
-    RING_LENGTH - (RING_LENGTH * countdown) / COUNTDOWN_FROM;
+  const ringOffset = RING_LENGTH - (RING_LENGTH * countdown) / COUNTDOWN_FROM;
   const ringColor = countdown > 5 ? "#6366f1" : "#ef4444";
 
   return (

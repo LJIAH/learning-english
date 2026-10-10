@@ -13,6 +13,7 @@ import {
 import Profile from "@/layout/Profile";
 import { useAvatar } from "@/hooks/useAvatar";
 import { useLogin } from "@/hooks/useLogin";
+import { toast } from "@/stores/toast";
 import { useUserStore } from "@/stores/user";
 
 type NavItem = {
@@ -28,7 +29,7 @@ type NavItem = {
  * 两处 Element Plus 替换：
  *   el-icon      → 直接用 lucide-react 图标组件（无需容器包装）
  *   el-popover   → 自实现（点击切换 + 点击外部关闭），见 useClickOutside
- *   ElMessage    → 暂以 console 代替，接入 UI 层后统一替换
+ *   ElMessage    → 极简 toast（stores/toast），见 @/components/Toaster
  */
 const navItems: NavItem[] = [
   { path: "/", label: "主页", icon: House },
@@ -68,8 +69,7 @@ export default function Header() {
         await openLogin();
         navigate(nav.path);
       } catch {
-        // TODO: 接入 UI 层后替换为 toast 提示「请先登录」
-        console.warn("[header] 请先登录");
+        toast.error("请先登录");
       }
       return;
     }
