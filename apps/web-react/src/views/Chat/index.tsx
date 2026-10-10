@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  ChatDto,
-  ChatMessage,
-  ChatRoleType,
-} from "@en/common/chat";
+import type { ChatDto, ChatMessage, ChatRoleType } from "@en/common/chat";
 import Bubble from "./components/Bubble";
 import Conversations from "./components/Conversations";
 import { sse, CHAT_URL } from "@/apis/sse";
@@ -76,9 +72,7 @@ export default function Chat() {
       contentBuffer.current = "";
       reasoningBuffer.current = "";
       const res = await getChatHistory(userId, chatRoleType);
-      setList(
-        (res.data ?? []).map((item) => ({ ...item, key: nextKey() })),
-      );
+      setList((res.data ?? []).map((item) => ({ ...item, key: nextKey() })));
     },
     [userId],
   );
@@ -135,9 +129,20 @@ export default function Chat() {
     [],
   );
 
+  /**
+   * 内联箭头函数会让子组件的「挂载时初始化」副作用每次都重跑
+   * （历史上导致模式切换被弹回第一项），这里固定身份。
+   */
+  const handleGetRole = useCallback(
+    (r: ChatRoleType) => {
+      void getRole(r);
+    },
+    [getRole],
+  );
+
   return (
     <div className="mx-auto mt-10 flex w-300">
-      <Conversations onGetRole={(r) => void getRole(r)} />
+      <Conversations onGetRole={handleGetRole} />
       <Bubble list={list} onSendMessage={sendMessage} />
     </div>
   );
