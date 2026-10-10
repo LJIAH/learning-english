@@ -2,6 +2,7 @@
   "packageManager": "pnpm@11.10.0",
   "scripts": {
     "web": "pnpm --filter @en/web dev",
+    "web-react": "pnpm --filter @en/web-react dev",
     "tracker": "pnpm --filter @en/tracker dev",
     "server": "pnpm --filter @en/server start:dev",
     "ai": "pnpm --filter @en/server start:dev ai",
