@@ -312,7 +312,7 @@ const RAW: Omit<Word, "createdAt" | "updatedAt">[] = [
   },
 ];
 
-const WORDS: Word[] = RAW.map((w, i) => ({
+export const WORDS: Word[] = RAW.map((w, i) => ({
   ...w,
   createdAt: new Date(2026, 0, i + 1).toISOString(),
   updatedAt: new Date(2026, 0, i + 1).toISOString(),
