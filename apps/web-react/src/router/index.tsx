@@ -2,17 +2,19 @@ import { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import Layout from "@/layout";
 import Home from "@/views/Home";
-import WordBook from "@/views/WordBook";
 import Course from "@/views/Course";
 import Learn from "@/views/Course/Learn";
 /**
- * 两个重依赖页面做懒加载，避免拖累首屏：
- *   - Setting：全站唯一用 Ant Design 的页面（表单校验手写等于重造轮子）
+ * 三个重依赖页面做懒加载，避免拖累首屏：
+ *   - Setting：Ant Design 表单（校验手写等于重造轮子）
  *   - Chat：额外引入 marked + dompurify（约 26 kB gzip）
+ *   - WordBook：改用 AntD Pagination 后也依赖 antd —— 不懒加载就会把
+ *     整个 antd 拖进首屏（实测 312 → 412 kB gzip）。三者共享同一份 antd chunk。
  * 首屏空闲时再由 App.tsx 预取，用户点进来时 chunk 已在缓存里。
  */
 const Setting = lazy(() => import("@/views/Setting"));
 const Chat = lazy(() => import("@/views/Chat"));
+const WordBook = lazy(() => import("@/views/WordBook"));
 
 /**
  * 路由 —— 对应 Vue 版的 router/index.ts。
@@ -26,7 +28,14 @@ export const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { index: true, element: <Home /> },
-      { path: "word-book", element: <WordBook /> },
+      {
+        path: "word-book",
+        element: (
+          <Suspense fallback={null}>
+            <WordBook />
+          </Suspense>
+        ),
+      },
       {
         path: "setting",
         element: (

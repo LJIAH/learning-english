@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { App as AntApp, Button, Card, ConfigProvider, Form, Tag } from "antd";
+import { App as AntApp, Button, Card, Form, Tag } from "antd";
 import type { ChangeEvent } from "react";
 import type { UserUpdate } from "@en/common/user";
 import { updateUser, uploadAvatar } from "@/apis/user";
 import { useAvatar } from "@/hooks/useAvatar";
 import { useLogin } from "@/hooks/useLogin";
 import { useUserStore } from "@/stores/user";
+import AntdProvider from "@/components/AntdProvider";
 import ProfileForm, { fromDayjs, toDayjs } from "./components/ProfileForm";
 
 const EMPTY: UserUpdate = {
@@ -18,16 +19,12 @@ const EMPTY: UserUpdate = {
   timingTaskTime: "",
 };
 
-/** 用 EP 的视觉参数收敛 AntD 默认风格，缩小两版差异 */
+/** AntD 容器与 WordBook 共用（token 集中在 components/AntdProvider，避免两处漂移） */
 function SettingRoot() {
   return (
-    <ConfigProvider
-      theme={{ token: { colorPrimary: "#409eff", borderRadius: 4 } }}
-    >
-      <AntApp>
-        <SettingInner />
-      </AntApp>
-    </ConfigProvider>
+    <AntdProvider>
+      <SettingInner />
+    </AntdProvider>
   );
 }
 

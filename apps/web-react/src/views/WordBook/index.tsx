@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { Pagination } from "antd";
+import DOMPurify from "dompurify";
 import { BookOpen, Play } from "lucide-react";
 import type { Word, WordQuery } from "@en/common/word";
 import { getWordBookList } from "@/apis/word-book";
 import { useAudio } from "@/hooks/useAudio";
-import Pagination from "@/components/Pagination";
+import AntdProvider from "@/components/AntdProvider";
 
 const FILTERS = [
   { key: "gk", label: "高考" },
@@ -183,9 +185,11 @@ export default function WordBook() {
                 </div>
                 <div
                   className="mb-1 line-clamp-2 overflow-hidden text-sm text-gray-600"
-                  // mock 数据为受控内容。接入真实接口前须补 DOMPurify 清洗
-                  // （Vue 版的 v-safe-html 指令做的就是这件事）
-                  dangerouslySetInnerHTML={{ __html: item.translation ?? "" }}
+                  // translation 来自后端接口，属不可信内容，必须经 DOMPurify 清洗再插 DOM
+                  // （对应 Vue 版的 v-safe-html 指令）
+                  dangerouslySetInnerHTML={{
+                    __html: DOMPurify.sanitize(item.translation ?? ""),
+                  }}
                 />
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-600">
                   {FILTERS.filter((f) => item[f.key]).map((f) => (
@@ -201,13 +205,23 @@ export default function WordBook() {
             ))}
       </div>
 
-      <div className="mt-10">
-        <Pagination
-          page={query.page}
-          pageSize={query.pageSize}
-          total={total}
-          onPageChange={handlePageChange}
-        />
+      <div className="mt-10 flex justify-center">
+        {/*
+          用 AntD Pagination 而非手写：它自带页码折叠（省略号 + 首尾页），
+          天然免疫「页数上万 → 平铺上万按钮 → 页面卡死」这类问题。
+          真实数据 total=770,611 / pageSize=12 → 64,218 页。
+          showSizeChanger=false：AntD 在 total>50 时默认显示「每页条数」下拉，
+          Vue 版（el-pagination background 模式）没有，关掉才对齐。
+        */}
+        <AntdProvider>
+          <Pagination
+            current={query.page}
+            pageSize={query.pageSize}
+            total={total}
+            showSizeChanger={false}
+            onChange={handlePageChange}
+          />
+        </AntdProvider>
       </div>
     </div>
   );

@@ -12,7 +12,7 @@ import { router } from "./router";
 const Login = lazy(() => import("@/components/Login"));
 
 /**
- * 预取懒加载页面（Setting、Chat）与登录弹窗。
+ * 预取懒加载页面（Setting、Chat、WordBook）与登录弹窗。
  *
  * 关键点：这里与 router / Login 里 React.lazy 用的是**同一个 import 说明符**，
  * Vite 解析为同一个模块、产出同一个 chunk —— 所以预取的就是用户
@@ -23,6 +23,7 @@ const Login = lazy(() => import("@/components/Login"));
 const prefetchLazyRoutes = () => {
   void import("@/views/Setting");
   void import("@/views/Chat");
+  void import("@/views/WordBook");
   void import("@/components/Login");
 };
 
