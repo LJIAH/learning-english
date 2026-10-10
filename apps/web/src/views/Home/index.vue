@@ -107,7 +107,7 @@
       style="perspective: 1000px"
     >
       <div
-        v-for="(item, index) in abouts"
+        v-for="item in abouts"
         :key="item.title"
         data-card
         class="home-reveal group relative overflow-hidden rounded-3xl p-8 cursor-pointer transition-all duration-500 hover:-translate-y-2 bg-white border border-gray-200 hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-500/10"

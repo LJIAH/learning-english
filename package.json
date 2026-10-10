@@ -13,10 +13,42 @@
     "test:unit": "pnpm --filter @en/tracker test",
     "test:e2e": "pnpm --filter @en/web test:e2e",
     "test:e2e:prod": "pnpm --filter @en/web test:e2e:prod",
-    "test:e2e:report": "pnpm --filter @en/web test:e2e:report"
+    "test:e2e:report": "pnpm --filter @en/web test:e2e:report",
+    "lint": "eslint .",
+    "type-check": "pnpm -r --if-present run type-check",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "concurrently": "^10.0.3",
-    "prettier": "^3.8.4"
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-vue": "^10.11.1",
+    "globals": "^16.5.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.8.4",
+    "typescript-eslint": "^8.61.0"
+  },
+  "lint-staged": {
+    "apps/**/*.{ts,tsx,vue}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "packages/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,json,md,yml,yaml}": [
+      "prettier --write"
+    ],
+    "*.{ts,tsx,mjs,cjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "server/**/*.{ts,tsx}": [
+      "prettier --write"
+    ]
   }
 }

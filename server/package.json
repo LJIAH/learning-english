@@ -8,6 +8,7 @@
   "scripts": {
     "build": "nest build",
     "build:ai": "nest build ai",
+    "type-check": "tsc --noEmit -p tsconfig.build.json",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",

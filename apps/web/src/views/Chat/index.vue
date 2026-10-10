@@ -1,7 +1,7 @@
 <template>
   <div class="w-300 mx-auto flex mt-10">
-    <Conversations @onGetRole="getRole" />
-    <Bubble :list="list" @onSendMessage="sendMessage" />
+    <Conversations @on-get-role="getRole" />
+    <Bubble :list="list" @on-send-message="sendMessage" />
   </div>
 </template>
 <script setup lang="ts">
@@ -20,7 +20,7 @@ import { getChatHistory } from "@/apis/chat";
 import { CHAT_URL, sse } from "@/apis/sse";
 
 const userStore = useUserStore();
-const userId = userStore.user?.id!;
+const userId = userStore.user!.id;
 const list = ref<ChatDisplayList>([]);
 // 默认值与左侧模式列表第一项保持一致
 const role = ref<ChatRoleType | null>("speaking");

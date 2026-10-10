@@ -1,0 +1,22 @@
+# 锁文件不进格式化（避免巨大 diff）
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# 构建产物
+dist
+node_modules
+coverage
+playwright-report
+test-results
+*.tsbuildinfo
+
+# 日志
+*.log
+
+# husky 内部目录
+.husky/_
+
+# 其它
+*.min.js
+*.min.css
