@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import TeacherBanner from "./components/TeacherBanner";
+import Hologram from "./components/Hologram";
 import { useLogin } from "@/hooks/useLogin";
 
 const STATS = [
@@ -191,7 +191,7 @@ export default function Home() {
           </div>
         </div>
         <div className="relative z-8 flex-1 -my-9 -mr-9">
-          <TeacherBanner />
+          <Hologram />
         </div>
       </div>
 

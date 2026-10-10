@@ -28,6 +28,11 @@ build/
 
 # 本地工具数据
 .codebuddy/
+
+# 3D 模型资产不入库（体积大、可从本地源恢复）。
+#   （本地模型源目录，不入库）
+#   → 拷贝到 apps/web-react/public/models/hologram（scene.gltf + scene.bin + license.txt，共 4.9MB）
+apps/web-react/public/models/
 .workbuddy/
 
 # Playwright 运行产物（报告/trace/截图）与 playwright-cli 快照
