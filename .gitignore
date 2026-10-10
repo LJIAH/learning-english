@@ -29,10 +29,14 @@ build/
 # 本地工具数据
 .codebuddy/
 
-# 3D 模型资产不入库（体积大、可从本地源恢复）。
-#   （本地模型源目录，不入库）
-#   → 拷贝到 apps/web-react/public/models/hologram（scene.gltf + scene.bin + license.txt，共 4.9MB）
-apps/web-react/public/models/
+# 3D 模型：源文件不入库（体积大），仅入库优化产物（部署产物需要，否则线上没模型）
+#   models-src/<name>/                 原始模型（从本地模型源目录拷入，不入库）
+#   public/models/<name>/scene.opt.glb 优化产物，由 pnpm --filter @en/web-react models:optimize 生成
+apps/web-react/models-src/
+apps/web-react/public/models/**
+!apps/web-react/public/models/**/
+!apps/web-react/public/models/**/*.opt.glb
+!apps/web-react/public/models/**/license.txt
 .workbuddy/
 
 # Playwright 运行产物（报告/trace/截图）与 playwright-cli 快照

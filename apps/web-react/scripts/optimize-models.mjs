@@ -1,20 +1,23 @@
 /**
- * 3D 模型优化脚本（glTF → 更小的 glb）
+ * 3D 模型优化管线（源文件 → public 下的优化产物）
  *
  * 用法：pnpm --filter @en/web-react models:optimize
  *
- * 本模型（Primary Ion Drive，Sketchfab CC-BY-4.0）的构成特征决定了优化手段：
- *   - 零贴图（images/textures/samplers 均为 0）→ 4.8MB 全是几何体
- *   - 颜色来自顶点色 COLOR_0（红/蓝/黄），不是材质贴图 → COLOR_0 必须保留
- *   - TEXCOORD_0 无任何纹理可采样 → 纯废数据，直接删除
- *   - 无 extensionsUsed → 无自定义着色器依赖 UV
+ * 目录约定（新增模型只需把源文件丢进 models-src/<name>/ 再跑一次本脚本）：
+ *   models-src/<name>/            原始模型（.gltf+.bin 或 .glb，可含贴图、license.txt）
+ *                                 —— 不入库（体积大）
+ *   public/models/<name>/scene.opt.glb
+ *                                 优化产物 —— 入库（部署产物需要它，否则线上没模型）
+ *   public/models/<name>/license.txt
+ *                                 源目录若带 license.txt 则一并拷贝（CC-BY 等署名义务）
  *
- * 管线：删 UV → dedup → weld → prune → resample → quantize → (可选 meshopt)
- * 产出两个文件：
- *   scene.q.glb    仅量化（KHR_mesh_quantization），three 的 GLTFLoader 原生支持，
- *                  无需任何额外解码器 —— 零运行时成本
- *   scene.opt.glb  量化 + meshopt（EXT_meshopt_compression），体积更小，
- *                  运行时需 MeshoptDecoder（three 已内置，约 30KB，随包一起）
+ * 管线：删无用 UV → dedup → weld → prune → resample → quantize → meshopt
+ * 说明：
+ *   - 仅当模型**无贴图**时才删 TEXCOORD_0（有贴图时 UV 是必需的）
+ *   - 顶点色 COLOR_0 保留（可能是颜色来源，如本仓库 hologram），量化到 uint8
+ *   - 产物是自包含单文件 .glb，运行时需 three 内置 MeshoptDecoder
+ *
+ * 本仓库 hologram 模型实测：4.84MB → 0.49MB（9.8x），几何零损失。
  */
 import { NodeIO } from "@gltf-transform/core";
 import {
@@ -30,16 +33,21 @@ import {
   meshopt,
 } from "@gltf-transform/functions";
 import { MeshoptEncoder } from "meshoptimizer";
-import { readFileSync, statSync } from "node:fs";
+import {
+  readdirSync,
+  statSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+} from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const modelDir = join(here, "../public/models/hologram");
-const input = join(modelDir, "scene.gltf");
+const srcRoot = join(here, "../models-src");
+const outRoot = join(here, "../public/models");
 
-const kb = (bytes) => (bytes / 1024).toFixed(0) + " KB";
-const mb = (bytes) => (bytes / 1048576).toFixed(2) + " MB";
+const mb = (b) => (b / 1048576).toFixed(2) + " MB";
 const sizeOf = (p) => {
   try {
     return statSync(p).size;
@@ -48,71 +56,80 @@ const sizeOf = (p) => {
   }
 };
 
-/** 模型原始体积 = gltf + 外部 bin */
-const originalSize = sizeOf(input) + sizeOf(join(modelDir, "scene.bin"));
-
-const io = new NodeIO().registerExtensions(KHRONOS_EXTENSIONS);
+/** 源目录里找模型入口：优先 .gltf，其次 .glb */
+function findSource(dir) {
+  const files = readdirSync(dir);
+  const gltf = files.find((f) => f.endsWith(".gltf"));
+  if (gltf) {
+    const bin = files.find((f) => f.endsWith(".bin"));
+    return {
+      file: join(dir, gltf),
+      originalSize:
+        sizeOf(join(dir, gltf)) + (bin ? sizeOf(join(dir, bin)) : 0),
+    };
+  }
+  const glb = files.find((f) => f.endsWith(".glb"));
+  if (glb)
+    return { file: join(dir, glb), originalSize: sizeOf(join(dir, glb)) };
+  return null;
+}
 
 await MeshoptEncoder.ready;
 
-/** 跑完整优化管线；withMeshopt 决定最后是否做 meshopt 压缩 */
-async function build(withMeshopt) {
-  const doc = await io.read(input);
+const io = new NodeIO().registerExtensions(KHRONOS_EXTENSIONS);
+const outIO = new NodeIO()
+  .registerExtensions([...KHRONOS_EXTENSIONS, EXTMeshoptCompression])
+  .registerDependencies({ "meshopt.encoder": MeshoptEncoder });
 
-  // 1) 删除无用的 TEXCOORD_0（零贴图，UV 无处可采样）
-  let droppedUV = 0;
-  for (const mesh of doc.getRoot().listMeshes()) {
-    for (const prim of mesh.listPrimitives()) {
-      if (prim.getAttribute("TEXCOORD_0")) {
-        prim.setAttribute("TEXCOORD_0", null);
-        droppedUV++;
+async function optimizeOne(name) {
+  const srcDir = join(srcRoot, name);
+  const src = findSource(srcDir);
+  if (!src) {
+    console.log(`- ${name}: 跳过（未找到 .gltf/.glb）`);
+    return;
+  }
+
+  const doc = await io.read(src.file);
+  const root = doc.getRoot();
+
+  // 1) 仅当无贴图时才删 TEXCOORD_0（有贴图时 UV 必需）
+  const hasTextures = root.listTextures().length > 0;
+  if (!hasTextures) {
+    for (const mesh of root.listMeshes()) {
+      for (const prim of mesh.listPrimitives()) {
+        if (prim.getAttribute("TEXCOORD_0"))
+          prim.setAttribute("TEXCOORD_0", null);
       }
     }
   }
 
-  // 2) 基础清理 + 动画重采样（4 条通道的关键帧去冗余）
-  await doc.transform(dedup(), weld(), prune(), resample());
+  // 2) 清理 + 动画重采样 + 量化 + meshopt
+  await doc.transform(dedup(), weld(), prune(), resample(), quantize());
+  await doc.transform(meshopt({ encoder: MeshoptEncoder }));
 
-  // 3) 量化：POSITION int16 / NORMAL int8 / COLOR_0 uint8
-  //    顶点色是颜色来源，量化到 8 位（等同 PNG 精度），肉眼无差
-  await doc.transform(quantize());
+  const outDir = join(outRoot, name);
+  mkdirSync(outDir, { recursive: true });
+  const outFile = join(outDir, "scene.opt.glb");
+  await outIO.write(outFile, doc);
 
-  // 4) 可选：meshopt 压缩
-  if (withMeshopt) {
-    await doc.transform(meshopt({ encoder: MeshoptEncoder }));
-  }
+  // 3) 署名文件一并拷出（CC-BY 等义务）
+  const license = join(srcDir, "license.txt");
+  if (existsSync(license)) copyFileSync(license, join(outDir, "license.txt"));
 
-  const outName = withMeshopt ? "scene.opt.glb" : "scene.q.glb";
-  const outPath = join(modelDir, outName);
-
-  const outIO = new NodeIO()
-    .registerExtensions([...KHRONOS_EXTENSIONS, EXTMeshoptCompression])
-    .registerDependencies({ "meshopt.encoder": MeshoptEncoder });
-  await outIO.write(outPath, doc);
-
-  return { outName, outPath, droppedUV };
+  console.log(
+    `- ${name}: ${mb(src.originalSize)} → ${mb(sizeOf(outFile))} ` +
+      `(${(src.originalSize / sizeOf(outFile)).toFixed(1)}x, ` +
+      `${hasTextures ? "含贴图" : "无贴图/已删UV"})`,
+  );
 }
 
-const q = await build(false);
-const opt = await build(true);
+const names = readdirSync(srcRoot, { withFileTypes: true })
+  .filter((d) => d.isDirectory())
+  .map((d) => d.name);
 
-console.log("原始体积（gltf+bin）:", mb(originalSize));
-console.log(
-  `${q.outName}  仅量化:        ${mb(sizeOf(q.outPath))}  (${kb(sizeOf(q.outPath))})`,
-);
-console.log(
-  `${opt.outName} 量化+meshopt:  ${mb(sizeOf(opt.outPath))}  (${kb(sizeOf(opt.outPath))})`,
-);
-console.log(
-  `压缩比: 仅量化 ${(originalSize / sizeOf(q.outPath)).toFixed(1)}x | meshopt ${(originalSize / sizeOf(opt.outPath)).toFixed(1)}x`,
-);
-console.log("删除的 TEXCOORD_0 数量:", q.droppedUV);
-
-// 打印 glb 里实际使用的扩展，确认运行时需要什么
-const buf = readFileSync(opt.outPath);
-const jsonLen = buf.readUInt32LE(12);
-const gltf = JSON.parse(buf.subarray(20, 20 + jsonLen).toString("utf8"));
-console.log(
-  "opt.glb extensionsUsed:",
-  JSON.stringify(gltf.extensionsUsed || []),
-);
+if (names.length === 0) {
+  console.log(`models-src 为空，无可优化模型（源目录: ${srcRoot}）`);
+} else {
+  console.log(`发现 ${names.length} 个模型源目录，开始优化：`);
+  for (const name of names) await optimizeOne(name);
+}
