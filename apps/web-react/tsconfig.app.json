@@ -6,6 +6,8 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "useDefineForClassFields": true,
+    // md5 是 CJS 包，默认导入需要它（Vue 版 tsconfig 同样依赖该行为）
+    "esModuleInterop": true,
 
     "strict": true,
     "noUncheckedIndexedAccess": true,

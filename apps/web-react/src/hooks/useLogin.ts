@@ -1,4 +1,7 @@
 import { create } from "zustand";
+import { logout as logoutApi } from "@/apis/user";
+import { router } from "@/router";
+import { toast } from "@/stores/toast";
 import { useUserStore } from "@/stores/user";
 
 interface LoginState {
@@ -8,29 +11,69 @@ interface LoginState {
   logout: () => void;
 }
 
+/** 当前等待中的登录流程（模块级，与 Vue 版 useLogin.ts 的实现对齐） */
+let pendingResolve: (() => void) | null = null;
+let pendingReject: (() => void) | null = null;
+let pendingPromise: Promise<void> | null = null;
+
+/** 清理 pending 状态，不触发任何回调 */
+const clearPending = () => {
+  pendingResolve = null;
+  pendingReject = null;
+  pendingPromise = null;
+};
+
 /**
- * 登录弹窗控制 —— 对应 Vue 版的 hooks/useLogin.ts。
+ * 登录弹窗控制 —— 对应 Vue 版 hooks/useLogin.ts。
  *
- * 与 Vue 版的差异（待接入真实接口后补齐）：
- *   Vue   : openLogin() 返回 Promise —— 已登录立即 resolve；
- *           未登录则挂起，登录成功 resolve、用户取消 reject（Esc / 点遮罩）
- *   React : 当前为占位实现，只负责开合弹窗，不做 Promise 挂起
+ * Promise 语义（首页「立即学习」依赖它：登录成功才跳转，取消则不跳）：
+ *   - 已登录       → 立即 resolve
+ *   - 未登录       → 挂起，登录成功 resolve、用户取消（Esc / 点遮罩）reject
  *
- * 首页「立即学习」依赖这个 Promise 语义：登录成功才跳 /chat，
- * 取消则不跳。接入真实登录时要把 reject 分支补回来。
+ * Vue 版把「关闭时 reject」放在 watch(isShowLogin) 里；React 没有 watch，
+ * 这段逻辑直接写进 closeLogin（关闭时统一判定：已登录 resolve，否则 reject）。
  */
 export const useLogin = create<LoginState>()((set) => ({
   isShowLogin: false,
 
-  openLogin: async () => {
-    const { user } = useUserStore.getState();
-    if (user) return;
+  openLogin: () => {
+    if (useUserStore.getState().user) return Promise.resolve();
     set({ isShowLogin: true });
+    // 已经在等待中的登录流程（例如弹窗 chunk 仍在加载时用户又点了一次）：
+    // 复用同一个 Promise。否则 pendingResolve 会被覆盖，
+    // 先前调用方的 await 将永远不会返回
+    if (pendingPromise) return pendingPromise;
+    pendingPromise = new Promise<void>((resolve, reject) => {
+      pendingResolve = resolve;
+      pendingReject = reject;
+    });
+    return pendingPromise;
   },
 
-  closeLogin: () => set({ isShowLogin: false }),
+  closeLogin: () => {
+    if (useUserStore.getState().user && pendingResolve) {
+      pendingResolve();
+      clearPending();
+    } else if (pendingReject) {
+      // 未登录就关闭 → 视为用户取消
+      pendingReject();
+      clearPending();
+    }
+    set({ isShowLogin: false });
+  },
 
   logout: () => {
-    useUserStore.getState().logout();
+    if (!window.confirm("确定要退出登录吗？")) return;
+    void (async () => {
+      // 通知后端吊销 token 并清除 cookie（best-effort，失败也清除本地状态）
+      try {
+        await logoutApi();
+      } catch {
+        // 忽略：即使后端登出失败也清除本地状态
+      }
+      useUserStore.getState().logout();
+      toast.success("已退出登录");
+      void router.navigate("/");
+    })();
   },
 }));
