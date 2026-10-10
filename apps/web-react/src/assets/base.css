@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+/* ------------------------------------------------------------------
+   首页入场动画的初始隐藏态。
+   配合 gsap 动态加载：避免「先显示、加载完又被设为透明」的闪烁。
+   gsap 动画结束会写入内联 opacity，优先级高于这里。
+   若 gsap 加载失败，组件侧有 revealAll() 兜底把 opacity 置为 1。
+   ------------------------------------------------------------------ */
+.home-reveal {
+  opacity: 0;
+}
+
+/* TeacherBanner 的呼吸缩放：替代原先 3D 模型的动效 */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
