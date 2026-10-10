@@ -27,3 +27,16 @@ body,
     transform: scale(1.03);
   }
 }
+
+/* 支付弹窗淡入 —— 对应 Vue 版 Pay.vue 的 pay-fade transition */
+@keyframes pay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.pay-fade {
+  animation: pay-fade-in 0.2s ease;
+}

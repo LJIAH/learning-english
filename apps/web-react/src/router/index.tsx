@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import Layout from "@/layout";
 import Home from "@/views/Home";
 import WordBook from "@/views/WordBook";
+import Course from "@/views/Course";
 
 /**
  * 设置页懒加载。
@@ -44,7 +45,11 @@ export const router = createBrowserRouter([
         ),
       },
       { path: "chat", element: <Placeholder title="AI 对话" /> },
-      { path: "courses", element: <Placeholder title="课程" /> },
+      { path: "courses", element: <Course /> },
+      {
+        path: "courses/learn/:courseId/:title",
+        element: <Placeholder title="课程学习" />,
+      },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
