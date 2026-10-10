@@ -1,7 +1,11 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { useThreeScene } from "@/hooks/useThreeScene";
+
+/** 优化后的模型：4.84MB → 0.49MB（9.8x）。生成方式见 scripts/optimize-models.mjs */
+const MODEL_URL = "/models/hologram/scene.opt.glb";
 
 /** 释放 GLTF 场景树上的几何体与材质（模型加载完成前组件已被卸载时兜底） */
 const disposeObject3D = (root: THREE.Object3D) => {
@@ -54,7 +58,9 @@ export default function Hologram() {
     let active = true;
 
     const loader = new GLTFLoader();
-    loader.load("/models/hologram/scene.gltf", (gltf) => {
+    // 模型经 meshopt 压缩（EXT_meshopt_compression），需注册解码器
+    loader.setMeshoptDecoder(MeshoptDecoder);
+    loader.load(MODEL_URL, (gltf) => {
       if (!active) {
         disposeObject3D(gltf.scene);
         return;

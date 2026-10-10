@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "type-check": "tsc -b"
+    "type-check": "tsc -b",
+    "models:optimize": "node scripts/optimize-models.mjs"
   },
   "dependencies": {
     "@en/common": "workspace:*",
