@@ -1,13 +1,21 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { User } from "@en/common/user";
+import type { UserUpdate, WebResultUser } from "@en/common/user";
 
-export type { User };
+export type { WebResultUser };
 
 interface UserState {
-  user: User | null;
-  setUser: (user: User | null) => void;
+  user: WebResultUser | null;
+  setUser: (user: WebResultUser | null) => void;
   logout: () => void;
+  /** 供 axios 请求拦截器使用（非组件环境，须用 getState() 调用） */
+  getAccessToken: () => string | undefined;
+  /** 401 刷新成功后更新 accessToken */
+  updateAccessToken: (accessToken: string) => void;
+  /** 更新用户信息（与 Vue 版 store 的 updateUser 逐字段对齐） */
+  updateUser: (info: UserUpdate) => void;
+  /** 学习完成后更新单词数量 */
+  updateUserWordNumber: (wordNumber: number) => void;
 }
 
 /**
@@ -19,31 +27,43 @@ interface UserState {
  *
  * 注意：React 侧必须用「选择器」取字段。直接 useUserStore() 会让组件在
  * 任意字段变化时都重渲染，是 Zustand 最常见的性能坑。
+ *
+ * 用户数据来自登录接口（WebResultUser），refreshToken 存 httpOnly cookie，
+ * 前端只持有短期 accessToken —— 与 Vue 版一致。
  */
 export const useUserStore = create<UserState>()(
   persist(
-    (set) => ({
-      // 展示用 mock 用户：让页面有数据可渲染。
-      // 接入真实登录后应改为 null，由登录流程写入。
-      user: {
-        id: "1",
-        name: "林佳辉",
-        phone: "13800138000",
-        password: "",
-        email: "demo@example.com",
-        address: "广州",
-        bio: "每天进步一点点",
-        avatar: "",
-        isTimingTask: false,
-        timingTaskTime: "",
-        wordNumber: 1280,
-        dayNumber: 5,
-        createdAt: new Date("2026-01-01T00:00:00Z"),
-        updatedAt: new Date("2026-01-01T00:00:00Z"),
-      },
+    (set, get) => ({
+      user: null,
       setUser: (user) => set({ user }),
       logout: () => set({ user: null }),
+      getAccessToken: () => get().user?.accessToken,
+      updateAccessToken: (accessToken) => {
+        const user = get().user;
+        if (user) set({ user: { ...user, accessToken } });
+      },
+      updateUser: (info) => {
+        const user = get().user;
+        if (!user) return;
+        set({
+          user: {
+            ...user,
+            ...info,
+            // UserUpdate.timingTaskTime 选填（关闭定时任务时为 undefined），
+            // 用户实体要求 string，用空串兜底
+            timingTaskTime: info.timingTaskTime ?? "",
+          },
+        });
+      },
+      updateUserWordNumber: (wordNumber) => {
+        const user = get().user;
+        if (user) set({ user: { ...user, wordNumber } });
+      },
     }),
-    { name: "en-user" },
+    {
+      name: "en-user",
+      // 只持久化 user；函数不参与序列化
+      partialize: (state) => ({ user: state.user }),
+    },
   ),
 );

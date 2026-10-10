@@ -16,8 +16,9 @@ export default function Conversations({ onGetRole }: ConversationsProps) {
     const init = async () => {
       const res = await getChatModeList();
       if (cancelled) return;
-      setChatMode(res.data);
-      const first = res.data[0];
+      const list = res.data ?? [];
+      setChatMode(list);
+      const first = list[0];
       if (first) {
         setActive(first.id);
         onGetRole(first.role);

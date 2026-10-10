@@ -13,6 +13,8 @@ build/
 # 不提交会导致「git clone 后构建」拿不到站点地址，上传/头像/课程图/Socket 全部失效。
 !apps/web/.env.production
 !apps/web/.env.development
+!apps/web-react/.env.production
+!apps/web-react/.env.development
 
 # Prisma 生成产物（按需 prisma generate 重新生成）
 **/generated/prisma/

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCourseList, getMyCourse, uploadUrl } from "@/apis/course";
+import { getCourseList, getMyCourse } from "@/apis/course";
+import { uploadUrl } from "@/apis/request";
 import type { Course as CourseItem } from "@en/common/course";
 import Tabs from "@/components/Tabs";
 import { useLogin } from "@/hooks/useLogin";
@@ -60,7 +61,7 @@ export default function Course() {
       try {
         const res =
           currentTab === "list" ? await getCourseList() : await getMyCourse();
-        if (!cancelled) setList(res.data);
+        if (!cancelled) setList(res.data ?? []);
       } finally {
         if (!cancelled) setLoading(false);
       }

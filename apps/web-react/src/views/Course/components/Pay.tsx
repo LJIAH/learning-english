@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createPay } from "@/apis/pay";
-import { uploadUrl } from "@/apis/course";
+import { uploadUrl } from "@/apis/request";
+import { toast } from "@/stores/toast";
 import type { Course } from "@en/common/course";
 import type { CreatePayDto } from "@en/common/pay";
 
@@ -21,11 +22,7 @@ const formatDuration = (ms: number) => {
 };
 
 /** 对应 Vue 版 Course/components/Pay.vue */
-export default function CoursePay({
-  open,
-  course,
-  onClose,
-}: CoursePayProps) {
+export default function CoursePay({ open, course, onClose }: CoursePayProps) {
   const [isPay, setIsPay] = useState(false);
   const [timeExpire, setTimeExpire] = useState(0);
   const [remain, setRemain] = useState(0);
@@ -51,8 +48,7 @@ export default function CoursePay({
         setRemain(0);
         setIsPay(false);
         setTimeExpire(0);
-        // TODO: 接入 UI 层后替换为 toast「支付超时，请重新支付」
-        console.warn("[pay] 支付超时，请重新支付");
+        toast.error("支付超时，请重新支付");
       } else {
         setRemain(left);
       }
@@ -80,8 +76,7 @@ export default function CoursePay({
       window.open(res.data.payUrl, "_blank");
       setTimeExpire(res.data.timeExpire);
     } else {
-      // TODO: 接入 UI 层后替换为 toast
-      console.error("[pay]", res.message ?? "支付创建失败");
+      toast.error(res.message ?? "支付创建失败");
       setIsPay(false);
     }
   };
