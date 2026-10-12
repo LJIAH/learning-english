@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Eye, EyeOff, Play } from "lucide-react";
+import DOMPurify from "dompurify";
 import type { Word } from "@en/common/word";
 import { getWordList, saveWordMaster } from "@/apis/learn";
 import { useAudio } from "@/hooks/useAudio";
@@ -290,9 +291,16 @@ export default function Learn() {
                   <p className="mb-2 text-xs font-medium tracking-wide text-zinc-400 uppercase">
                     翻译
                   </p>
-                  <div className="leading-relaxed whitespace-pre-line text-zinc-600">
-                    {currentWord?.translation?.replace(/<[^>]+>/g, "")}
-                  </div>
+                  <div
+                    className="leading-relaxed whitespace-pre-line text-zinc-600"
+                    // translation 来自后端接口，属不可信内容，必须经 DOMPurify 清洗再插 DOM
+                    // （对应 Vue 版的 v-safe-html 指令）
+                    dangerouslySetInnerHTML={{
+                      __html: DOMPurify.sanitize(
+                        currentWord?.translation ?? "",
+                      ),
+                    }}
+                  />
                 </div>
 
                 <div className="rounded-lg border border-zinc-100 bg-zinc-50/80 p-4">
