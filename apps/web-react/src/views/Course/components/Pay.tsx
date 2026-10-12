@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createPay } from "@/apis/pay";
+import { socketClient } from "@/apis/socket";
 import { uploadUrl } from "@/apis/request";
 import { toast } from "@/stores/toast";
 import type { Course } from "@en/common/course";
@@ -10,6 +11,8 @@ interface CoursePayProps {
   open: boolean;
   course: Course | null;
   onClose: () => void;
+  /** 支付成功通知：让父页面把刚买的课程刷出来 */
+  onPaid?: () => void;
 }
 
 /** HH:mm:ss —— 替代 el-countdown */
@@ -22,7 +25,12 @@ const formatDuration = (ms: number) => {
 };
 
 /** 对应 Vue 版 Course/components/Pay.vue */
-export default function CoursePay({ open, course, onClose }: CoursePayProps) {
+export default function CoursePay({
+  open,
+  course,
+  onClose,
+  onPaid,
+}: CoursePayProps) {
   const [isPay, setIsPay] = useState(false);
   const [timeExpire, setTimeExpire] = useState(0);
   const [remain, setRemain] = useState(0);
@@ -62,6 +70,46 @@ export default function CoursePay({ open, course, onClose }: CoursePayProps) {
     setIsPay(false);
     onClose();
   };
+
+  // 回调放进 ref：effect 只依赖 open，避免父组件每次渲染传入新函数导致反复订阅/退订
+  const latest = useRef({ onPaid, close });
+  useEffect(() => {
+    latest.current = { onPaid, close };
+  });
+
+  /**
+   * 支付成功回调 —— 对应 Vue 版 Pay.vue 里 watch(modelValue) 的
+   * `socket?.on("paymentSuccess")`：打开弹窗时订阅、关闭时退订。
+   *
+   * 后端在支付成功后向 user_<userId> 房间推送该事件；若前端不监听，
+   * 用户扫码付完钱界面也毫无反应（只能等倒计时超时提示）——这是 React 版此前的缺口。
+   */
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    let off: (() => void) | null = null;
+
+    void (async () => {
+      // 幂等：已登录用户在 App.tsx 里已连过，这里直接复用同一实例
+      await socketClient.connect();
+      if (!active) return;
+      const socket = socketClient.getSocket();
+      if (!socket) return;
+
+      const onPaymentSuccess = () => {
+        toast.success("支付成功");
+        latest.current.onPaid?.();
+        latest.current.close();
+      };
+      socket.on("paymentSuccess", onPaymentSuccess);
+      off = () => socket.off("paymentSuccess", onPaymentSuccess);
+    })();
+
+    return () => {
+      active = false;
+      off?.();
+    };
+  }, [open]);
 
   const onConfirm = async () => {
     const body: CreatePayDto = {

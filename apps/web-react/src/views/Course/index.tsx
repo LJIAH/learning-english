@@ -53,6 +53,8 @@ export default function Course() {
   const [loading, setLoading] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<CourseItem | null>(null);
   const [payVisible, setPayVisible] = useState(false);
+  /** 支付成功后 +1：即使当前已在「我的课程」也强制重新拉取 */
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +72,17 @@ export default function Course() {
     return () => {
       cancelled = true;
     };
-  }, [currentTab]);
+  }, [currentTab, refreshKey]);
+
+  /**
+   * 支付成功：切到「我的课程」并重拉。
+   * （Vue 版收到 paymentSuccess 只提示 + 关弹窗；React 侧顺手把刚买的课
+   *  刷到「我的课程」—— 否则用户付完钱看不到任何变化。）
+   */
+  const handlePaid = () => {
+    setCurrentTab("my");
+    setRefreshKey((k) => k + 1);
+  };
 
   const openPay = async (course: CourseItem) => {
     await openLogin();
@@ -169,6 +181,7 @@ export default function Course() {
         open={payVisible}
         course={selectedCourse}
         onClose={() => setPayVisible(false)}
+        onPaid={handlePaid}
       />
     </div>
   );
