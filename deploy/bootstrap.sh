@@ -11,7 +11,7 @@
 #   bash /root/bootstrap.sh <仓库地址>           # 计划模式：只打印，不改动
 #   bash /root/bootstrap.sh <仓库地址> --yes     # 真正执行
 #
-# 可用环境变量覆盖：REPO_DIR BRANCH WEB_ROOT WEB_OWNER PM2_APP OLD_PM2_APP BACKUP_DIR
+# 可用环境变量覆盖：REPO_DIR BRANCH WEB_ROOT WEB_OWNER PM2_APP OLD_PM2_APP BACKUP_DIR WEB_VARIANT
 #
 # 注意：为了让新进程拿到 3000 端口，会先停掉旧的 pm2 进程，因此有秒级停机。
 #
@@ -26,6 +26,15 @@ CONFIRM="${2:-}"
 REPO_DIR="${REPO_DIR:-/www/wwwroot/english-code}"
 BRANCH="${BRANCH:-master}"
 WEB_ROOT="${WEB_ROOT:-/www/wwwroot/english.kevy.top}"
+# 前端变体：与 deploy.sh 的映射保持一致（本文件要求单文件自包含，所以这里重复一份）
+#   vue   -> @en/web / apps/web / #app
+#   react -> @en/web-react / apps/web-react / #root
+WEB_VARIANT="${WEB_VARIANT:-vue}"
+case "$WEB_VARIANT" in
+  vue)   WEB_PKG='@en/web';       WEB_DIR='apps/web';       WEB_MOUNT='#app'  ;;
+  react) WEB_PKG='@en/web-react'; WEB_DIR='apps/web-react'; WEB_MOUNT='#root' ;;
+  *)     printf '\n[error] 未知前端变体: %s（可选: vue react）\n' "$WEB_VARIANT" >&2; exit 1 ;;
+esac
 WEB_OWNER="${WEB_OWNER:-www:www}"
 PM2_APP="${PM2_APP:-english-server}"                 # 新进程名，见 ecosystem.config.js
 OLD_PM2_APP="${OLD_PM2_APP:-main}"                   # 迁移前的旧进程名
@@ -122,14 +131,15 @@ migrate_env() {
 }
 
 install_build() {
-  log "4/8 安装依赖、应用数据库迁移并构建（顺序不可变：install -> generate -> migrate -> tracker -> web -> server -> ai）"
-  printf '    说明：没有 postinstall 钩子，prisma generate 必须显式跑；web 依赖 tracker 的 dist\n'
+  log "4/8 安装依赖、应用数据库迁移并构建（顺序不可变：install -> generate -> migrate -> tracker -> 前端 -> server -> ai）"
+  printf '    说明：没有 postinstall 钩子，prisma generate 必须显式跑；前端依赖 tracker 的 dist\n'
+  printf '    本次前端变体: %s（包 %s）\n' "$WEB_VARIANT" "$WEB_PKG"
   run_sh "pnpm install --frozen-lockfile" "$REPO_DIR"
   run_sh "pnpm --filter @en/server run prisma:generate" "$REPO_DIR"
   # 全新库必须先把迁移应用上去，否则应用起来连表都没有
   run_sh "pnpm --filter @en/server exec prisma migrate deploy" "$REPO_DIR"
   run_sh "pnpm --filter @en/tracker build" "$REPO_DIR"
-  run_sh "pnpm --filter @en/web build" "$REPO_DIR"
+  run_sh "pnpm --filter $WEB_PKG build" "$REPO_DIR"
   run_sh "pnpm --filter @en/server build" "$REPO_DIR"
   # apps/ai 与 apps/server 同在 server/ 这个 nest 项目下，产物是另一条嵌套路径
   run_sh "pnpm --filter @en/server run build:ai" "$REPO_DIR"
@@ -147,11 +157,11 @@ assert_artifacts() {
   local ai_entry="$REPO_DIR/server/dist/apps/ai/apps/ai/src/main.js"
   [ -f "$ai_entry" ] || die "找不到 AI 应用入口 $ai_entry（build:ai 没跑或失败，ecosystem.config.js 里的 english-ai 会起不来）"
   ok "AI 应用入口存在"
-  [ -f "$REPO_DIR/apps/web/dist/index.html" ] || die "找不到前端产物 apps/web/dist/index.html"
-  if grep -rq 'english.kevy.top' "$REPO_DIR/apps/web/dist/assets"; then
-    ok "前端 bundle 带站点地址（apps/web/.env.production 生效）"
+  [ -f "$REPO_DIR/$WEB_DIR/dist/index.html" ] || die "找不到前端产物 $WEB_DIR/dist/index.html（变体 $WEB_VARIANT）"
+  if grep -rq 'english.kevy.top' "$REPO_DIR/$WEB_DIR/dist/assets"; then
+    ok "前端 bundle 带站点地址（$WEB_DIR/.env.production 生效）"
   else
-    die "前端 bundle 里没有站点地址：apps/web/.env.production 没被加载，上传/头像/课程图/Socket 会全挂"
+    die "前端 bundle 里没有站点地址：$WEB_DIR/.env.production 没被加载，上传/头像/课程图/Socket 会全挂"
   fi
 }
 
@@ -191,7 +201,7 @@ migrate_files() {
       run mv "$WEB_ROOT/$item" "$BACKUP_DIR/"
     fi
   done
-  run_sh "rsync -a --delete --human-readable --exclude='.user.ini' --exclude='.htaccess' --exclude='.well-known/' --chown='$WEB_OWNER' '$REPO_DIR/apps/web/dist/' '$WEB_ROOT/'"
+  run_sh "rsync -a --delete --human-readable --exclude='.user.ini' --exclude='.htaccess' --exclude='.well-known/' --chown='$WEB_OWNER' '$REPO_DIR/$WEB_DIR/dist/' '$WEB_ROOT/'"
 }
 
 final_checks() {
@@ -215,9 +225,10 @@ final_checks() {
      （注意下一次 deploy.sh 的 startOrReload 会把它再拉起来）。
 
 之后的日常操作：
-  发布   bash deploy/deploy.sh --deploy
-  回滚   bash deploy/deploy.sh --rollback
-  自检   bash deploy/verify.sh
+  发布     bash deploy/deploy.sh --deploy                # 默认沿用线上当前的前端版本
+  切换前端 bash deploy/deploy.sh --deploy --web react    # 或 --web vue，随时可切
+  回滚     bash deploy/deploy.sh --rollback              # 代码 + 前端版本一起回退
+  自检     bash deploy/verify.sh
 NEXT
 }
 
@@ -227,6 +238,7 @@ main() {
   printf '  代码目录  : %s\n' "$REPO_DIR"
   printf '  web 根    : %s\n' "$WEB_ROOT"
   printf '  备份目录  : %s\n' "$BACKUP_DIR"
+  printf '  前端变体  : %s（%s -> %s）\n' "$WEB_VARIANT" "$WEB_PKG" "$WEB_DIR/dist"
   if [ "$DRY" = "1" ]; then
     printf '  模式      : 计划模式（只打印，不做任何改动）\n'
   else

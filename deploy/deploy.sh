@@ -3,7 +3,10 @@
 # 生产发布脚本（在服务器上执行）
 #
 #   bash deploy/deploy.sh             正常发布：拉取 -> 安装 -> 构建 -> 应用迁移 -> 同步前端 -> 重载 pm2 -> 自检
-#   bash deploy/deploy.sh --rollback  回滚到上一次发布前的提交
+#                                     不带 --web 时沿用线上当前的前端版本
+#   bash deploy/deploy.sh --web react 发布 React 版前端（Vue / React 可随时切换，映射见下方变体表）
+#   bash deploy/deploy.sh --print-plan --web react   只打印本次解析结果，不触碰服务器
+#   bash deploy/deploy.sh --rollback  回滚到上一次发布前的提交（连同前端版本一起回退）
 #   bash deploy/deploy.sh --help
 #
 # 前提（与 deploy/README.md 的拓扑一致）：
@@ -21,10 +24,46 @@ PM2_APP="${PM2_APP:-english-server}"
 WEB_OWNER="${WEB_OWNER:-www:www}"                      # 静态文件属主；置空则不修改属主
 # 用来校验前端产物里确实注入了 .env.production 的域名，防止漏配造成静默故障
 EXPECT_BUNDLE_HOST="${EXPECT_BUNDLE_HOST:-english.kevy.top}"
+WEB_VARIANT="${WEB_VARIANT:-}"                              # 前端变体；空 = 沿用线上当前版本（首次默认 vue）
 
 STATE_DIR="$REPO_DIR/.deploy-state"
 
 export REPO_DIR WEB_ROOT
+
+# ---------- 前端变体（Vue / React） ----------
+# 线上同一个 web 根同一时刻只能服务一份静态产物，所以发布时显式选择构建哪个前端。
+# 下面这张表是唯一需要维护的地方：变体 -> 包名 / 产物目录 / index.html 挂载点。
+# 刻意不含分支信息 —— 两个前端都随当前部署分支（BRANCH，默认 master）一起发布。
+WEB_VARIANTS="vue react"
+
+is_valid_variant() { case "$1" in vue|react) return 0 ;; *) return 1 ;; esac; }
+
+use_variant() { # $1 = 变体名，设置本次发布的 WEB_VARIANT_NAME / WEB_PKG / WEB_DIR / WEB_MOUNT
+  case "$1" in
+    vue)   WEB_PKG='@en/web';       WEB_DIR='apps/web';       WEB_MOUNT='#app'  ;;
+    react) WEB_PKG='@en/web-react'; WEB_DIR='apps/web-react'; WEB_MOUNT='#root' ;;
+    *)     die "未知前端变体: $1（可选: $WEB_VARIANTS）" ;;
+  esac
+  WEB_VARIANT_NAME="$1"
+}
+
+live_web_variant() { # 线上当前变体：由同步成功后的状态文件记录；没有记录时打印空
+  [ -f "$STATE_DIR/web-variant" ] || return 0
+  tr -d '[:space:]' < "$STATE_DIR/web-variant"
+}
+
+resolve_web_variant() { # 优先级：--web / WEB_VARIANT > 线上当前版本 > vue
+  local want="${WEB_VARIANT:-}"
+  if [ -z "$want" ]; then
+    want="$(live_web_variant)"
+    if [ -n "$want" ] && ! is_valid_variant "$want"; then
+      warn "状态文件 $STATE_DIR/web-variant 内容无法识别，按首次发布处理（vue）"
+      want=''
+    fi
+  fi
+  [ -n "$want" ] || want='vue'
+  use_variant "$want"
+}
 
 # ---------- 输出 ----------
 log()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -34,12 +73,22 @@ die()  { printf '\033[1;31m[error] %s\033[0m\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'USAGE'
 用法:
-  bash deploy/deploy.sh             发布（拉取 -> 安装 -> 构建 -> 应用迁移 -> 同步前端 -> 重载 pm2 -> 自检）
-  bash deploy/deploy.sh --rollback  回滚到上一次发布前的提交
+  bash deploy/deploy.sh [--web vue|react] [--branch <分支>]
+  bash deploy/deploy.sh --print-plan [--web vue|react]
+  bash deploy/deploy.sh --rollback
   bash deploy/deploy.sh --help
 
+前端变体（同一时刻线上只有一版，可随时切回）:
+  vue    包 @en/web       产物 apps/web/dist       挂载点 #app
+  react  包 @en/web-react 产物 apps/web-react/dist 挂载点 #root
+
+说明:
+  * 不带 --web 时沿用线上当前版本（首次发布默认 vue），避免忘带参数而误切版本
+  * 两个变体都随同一个 BRANCH（默认 master）发布，与分支无关
+  * --print-plan 只打印解析结果，不触碰服务器
+
 可用环境变量覆盖:
-  REPO_DIR  BRANCH  WEB_ROOT  PM2_APP  WEB_OWNER  EXPECT_BUNDLE_HOST
+  REPO_DIR  BRANCH  WEB_VARIANT  WEB_ROOT  PM2_APP  WEB_OWNER  EXPECT_BUNDLE_HOST
 USAGE
 }
 
@@ -79,6 +128,8 @@ pull_code() {
   # --ff-only：本地若有分叉（不该发生）宁可失败，也不要产生合并提交
   git merge --ff-only "origin/$BRANCH"
   log "目标提交: $(git rev-parse --short HEAD)  $(git log -1 --pretty=%s)"
+  # 变体要的前端目录必须在当前提交里存在，否则会出现「构建成功但 rsync 了空目录」
+  [ -d "$REPO_DIR/$WEB_DIR" ] || die "提交 $(git rev-parse --short HEAD) 里没有 $WEB_DIR，无法发布变体 $WEB_VARIANT_NAME。确认该前端已合入 $BRANCH"
 }
 
 install_build() {
@@ -91,12 +142,12 @@ install_build() {
   log "生成 Prisma Client"
   pnpm --filter @en/server run prisma:generate
 
-  # 这里有真实的构建顺序依赖：apps/web 的 App.vue import 了 @en/tracker，
-  # 而 @en/tracker 的 package.json exports 指向 dist/，所以必须先构建 tracker 再构建 web
+  # 这里有真实的构建顺序依赖：前端 import 了 @en/tracker，
+  # 而 @en/tracker 的 package.json exports 指向 dist/，所以必须先构建 tracker 再构建前端
   log "构建 @en/tracker"
   pnpm --filter @en/tracker build
-  log "构建 @en/web"
-  pnpm --filter @en/web build
+  log "构建前端 变体=$WEB_VARIANT_NAME 包=$WEB_PKG"
+  pnpm --filter "$WEB_PKG" build
   log "构建 @en/server"
   pnpm --filter @en/server build
 
@@ -111,18 +162,18 @@ assert_artifacts() {
   log "校验构建产物"
   local entry="$REPO_DIR/server/dist/apps/server/apps/server/src/main.js"
   local ai_entry="$REPO_DIR/server/dist/apps/ai/apps/ai/src/main.js"
-  local web_index="$REPO_DIR/apps/web/dist/index.html"
+  local web_index="$REPO_DIR/$WEB_DIR/dist/index.html"
   [ -f "$entry" ] || die "后端入口不存在: $entry（构建失败，或 nest-cli 输出的嵌套路径变了）"
   [ -f "$ai_entry" ] || die "AI 应用入口不存在: $ai_entry（build:ai 没跑或失败，ecosystem.config.js 里的 english-ai 会起不来）"
-  [ -f "$web_index" ] || die "前端产物不存在: $web_index"
+  [ -f "$web_index" ] || die "前端产物不存在: $web_index（变体 $WEB_VARIANT_NAME）"
 
-  # 前端把 VITE_UPLOAD_URL / VITE_SOCKET_URL 编译进 bundle，取值来自 apps/web/.env.production。
+  # 前端把 VITE_UPLOAD_URL / VITE_SOCKET_URL 编译进 bundle，取值来自 $WEB_DIR/.env.production。
   # 该文件一旦缺失，构建照样成功，但线上头像/课程图片和 Socket.IO 会连不上——属于静默故障。
   # 这里用"产物中必须出现生产域名"来兜住它。
-  if ! grep -rqs "$EXPECT_BUNDLE_HOST" "$REPO_DIR/apps/web/dist/assets"; then
-    die "前端产物里找不到 '$EXPECT_BUNDLE_HOST'，多半是 apps/web/.env.production 缺失（VITE_UPLOAD_URL/VITE_SOCKET_URL 未注入）"
+  if ! grep -rqs "$EXPECT_BUNDLE_HOST" "$REPO_DIR/$WEB_DIR/dist/assets"; then
+    die "前端产物里找不到 '$EXPECT_BUNDLE_HOST'，多半是 $WEB_DIR/.env.production 缺失（VITE_UPLOAD_URL/VITE_SOCKET_URL 未注入）"
   fi
-  log "产物校验通过"
+  log "产物校验通过（前端变体: $WEB_VARIANT_NAME）"
 }
 
 migrate_db() {
@@ -140,7 +191,7 @@ migrate_db() {
 }
 
 sync_web() {
-  log "同步前端产物到 web 根"
+  log "同步前端产物到 web 根（变体: $WEB_VARIANT_NAME）"
   local args=(-a --delete --human-readable)
   # .user.ini 是宝塔生成的反跨站配置文件，不属于构建产物，必须排除，否则 --delete 会删掉它
   args+=(--exclude='.user.ini')
@@ -149,7 +200,25 @@ sync_web() {
   if [ "$(id -u)" = "0" ] && [ -n "$WEB_OWNER" ]; then
     args+=(--chown="$WEB_OWNER")
   fi
-  rsync "${args[@]}" "$REPO_DIR/apps/web/dist/" "$WEB_ROOT/"
+  rsync "${args[@]}" "$REPO_DIR/$WEB_DIR/dist/" "$WEB_ROOT/"
+}
+
+# 状态文件描述「线上现在跑的是哪版」和「上一版是什么」，两者都在 rsync 成功之后才写：
+# 提前写会在同步失败时留下错误记录，--rollback 就会挑错前端版本去重建。
+record_web_state() {
+  mkdir -p "$STATE_DIR"
+  local prev
+  prev="$(live_web_variant)"
+  [ -n "$prev" ] || prev="$WEB_VARIANT_NAME"
+  printf '%s\n' "$prev" > "$STATE_DIR/previous-web"
+  printf '%s\n' "$WEB_VARIANT_NAME" > "$STATE_DIR/web-variant"
+}
+
+# 回滚专用：只更新「当前版本」，保留原来的 previous-web，
+# 免得再回滚一次又被弹回那个刚被判定有问题的版本。
+set_live_web_variant() {
+  mkdir -p "$STATE_DIR"
+  printf '%s\n' "$WEB_VARIANT_NAME" > "$STATE_DIR/web-variant"
 }
 
 assert_layout() {
@@ -179,20 +248,41 @@ reload_pm2() {
 }
 
 do_deploy() {
+  # 先解析变体：参数写错就在这里报错，不必等到服务器上跑了一半
+  resolve_web_variant
+  log "本次发布前端: $WEB_VARIANT_NAME（包 $WEB_PKG，产物 $WEB_DIR/dist，挂载点 $WEB_MOUNT）"
   preflight
   pull_code
   install_build
   assert_artifacts
   migrate_db
   sync_web
+  record_web_state
   assert_layout
   reload_pm2
   log "发布完成: $(cd "$REPO_DIR" && git rev-parse --short HEAD)"
   bash "$REPO_DIR/deploy/verify.sh"
-  printf '\n完成。日志查看: pm2 logs %s / pm2 logs english-ai\n' "$PM2_APP"
+  printf '\n本次发布前端版本: %s\n' "$WEB_VARIANT_NAME"
+  printf '切换另一版: bash deploy/deploy.sh --deploy --web vue\|react\n'
+  printf '日志查看: pm2 logs %s / pm2 logs english-ai\n' "$PM2_APP"
 }
 
 do_rollback() {
+  # 前端版本也要一起回退：目标是「上一次发布之前线上跑的那版」。
+  # 必须在后面 install_build / sync_web 之前定下来，它们都按这个变体走。
+  local prev_web=''
+  if [ -f "$STATE_DIR/previous-web" ]; then
+    prev_web="$(tr -d '[:space:]' < "$STATE_DIR/previous-web")"
+  fi
+  if [ -n "$prev_web" ] && is_valid_variant "$prev_web"; then
+    WEB_VARIANT="$prev_web"
+  else
+    warn "没有可用的前端版本记录（$STATE_DIR/previous-web），沿用线上当前的前端版本"
+    WEB_VARIANT=''
+  fi
+  resolve_web_variant
+  log "本次回滚前端: $WEB_VARIANT_NAME（包 $WEB_PKG）"
+
   preflight
   [ -f "$STATE_DIR/previous-sha" ] || die "没有回滚记录（$STATE_DIR/previous-sha 不存在）。至少成功发布过一次才能回滚"
   local sha
@@ -203,21 +293,52 @@ do_rollback() {
   # 回滚需要能构建旧代码；checkout 会一并切回当时的 pnpm-lock.yaml，所以 --frozen-lockfile 依旧成立
   git checkout --detach "$sha"
   warn "已切到 detached HEAD。下次正常执行 deploy.sh 时会自动切回 $BRANCH"
+  [ -d "$REPO_DIR/$WEB_DIR" ] || die "回滚目标 $sha 里没有 $WEB_DIR，无法重建变体 $WEB_VARIANT_NAME。可显式指定要重建的前端：WEB_VARIANT=vue bash deploy/deploy.sh --rollback"
   # 刻意不跑 migrate_db：回滚的是代码，不是数据库。
   # migrate deploy 只能向前应用迁移，没有自动反向迁移，所以回滚前要确认那次发布
   # 没有带不可逆的 schema 变更；verify.sh 的第 6 项会把这种情况报出来。
   install_build
   assert_artifacts
   sync_web
+  set_live_web_variant
   assert_layout
   reload_pm2
-  log "回滚完成"
+  log "回滚完成（前端变体: $WEB_VARIANT_NAME）"
   bash "$REPO_DIR/deploy/verify.sh"
 }
 
-case "${1:-}" in
-  ""|--deploy) do_deploy ;;
-  --rollback)  do_rollback ;;
-  -h|--help)   usage ;;
-  *)           usage; die "未知参数: $1" ;;
+do_print_plan() {
+  resolve_web_variant
+  local live
+  live="$(live_web_variant)"
+  printf '\n前端变体 : %s\n' "$WEB_VARIANT_NAME"
+  printf '包名     : %s\n' "$WEB_PKG"
+  printf '产物目录 : %s/%s/dist\n' "$REPO_DIR" "$WEB_DIR"
+  printf '挂载点   : %s\n' "$WEB_MOUNT"
+  printf '部署分支 : %s\n' "$BRANCH"
+  printf '代码目录 : %s\n' "$REPO_DIR"
+  printf 'web 根   : %s\n' "$WEB_ROOT"
+  printf '线上当前 : %s\n' "${live:-（无记录，按首次发布默认 vue 处理）}"
+  printf '状态目录 : %s\n' "$STATE_DIR"
+  printf '\n以上为本地解析结果，未触碰服务器。\n\n'
+}
+
+ACTION='--deploy'
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --deploy)     ACTION='--deploy'; shift ;;
+    --rollback)   ACTION='--rollback'; shift ;;
+    --print-plan) ACTION='--print-plan'; shift ;;
+    --web)        [ $# -ge 2 ] || die "--web 需要跟一个变体名（可选: $WEB_VARIANTS）"; WEB_VARIANT="$2"; shift 2 ;;
+    --branch)     [ $# -ge 2 ] || die "--branch 需要跟一个分支名（默认 $BRANCH）"; BRANCH="$2"; shift 2 ;;
+    -h|--help)    ACTION='--help'; shift ;;
+    *)            usage; die "未知参数: $1" ;;
+  esac
+done
+
+case "$ACTION" in
+  --deploy)     do_deploy ;;
+  --rollback)   do_rollback ;;
+  --print-plan) do_print_plan ;;
+  --help)       usage ;;
 esac

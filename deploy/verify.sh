@@ -12,7 +12,8 @@
 #   4. 非白名单来源不再返回 5xx（回归检查：这曾经是个把整个接口打成 500 的 bug）
 #   5. AI 应用（english-ai）在 3001 上就绪
 #   6. 数据库迁移与仓库一致（prisma migrate status）
-#   7. 可选 tracker 链路 UV -> event
+#   7. 前端产物与引用一致（index.html 存在，且它引用的 /assets 资源都在；并报告线上是 Vue 还是 React）
+#   8. 可选 tracker 链路 UV -> event
 #
 # 刻意不用 set -e：自检要把所有项跑完再汇总，不能第一项失败就退出
 
@@ -40,7 +41,7 @@ probe_register() { # $1 = Origin（可为空）
   fi
 }
 
-printf '\n[1/6] 端口监听\n'
+printf '\n[1/7] 端口监听\n'
 if command -v ss >/dev/null 2>&1; then
   if ss -lntp 2>/dev/null | grep -q ':3000'; then
     pass "3000 端口有监听"
@@ -51,7 +52,7 @@ else
   note "系统没有 ss 命令，跳过端口检查，由下一项接口探针间接验证"
 fi
 
-printf '\n[2/6] 接口探针\n'
+printf '\n[2/7] 接口探针\n'
 code="$(probe_register '')"
 case "$code" in
   400) pass "POST /user/register 返回 400（参数校验生效，业务链路通）" ;;
@@ -60,7 +61,7 @@ case "$code" in
   *)   bad "POST /user/register 返回 $code（期望 400，或 429 表示限流）" ;;
 esac
 
-printf '\n[3/6] CORS 白名单与 .env 一致性\n'
+printf '\n[3/7] CORS 白名单与 .env 一致性\n'
 env_file="$REPO_DIR/server/.env"
 origin=""
 if [ ! -f "$env_file" ]; then
@@ -88,7 +89,7 @@ fi
 # 注意：本项会故意带一个非白名单 Origin 请求一次，后端会写一条
 # 「[CORS] 已拒绝来源: https://not-in-whitelist.example.com」到 english-server-error.log，
 # 属于预期输出，不是故障。
-printf '\n[4/6] 非白名单来源回归检查\n'
+printf '\n[4/7] 非白名单来源回归检查\n'
 code="$(probe_register 'https://not-in-whitelist.example.com')"
 if [ "$code" -ge 500 ] 2>/dev/null; then
   bad "非白名单来源返回 $code（期望 4xx）：CORS 拒绝被抛成异常，会被 Nest 兜底成 500"
@@ -98,7 +99,7 @@ else
   pass "非白名单来源返回 $code（非 5xx，符合预期）"
 fi
 
-printf '\n[5/6] AI 应用（english-ai）\n'
+printf '\n[5/7] AI 应用（english-ai）\n'
 if command -v ss >/dev/null 2>&1; then
   if ss -lntp 2>/dev/null | grep -q ':3001'; then
     pass "3001 端口有监听"
@@ -113,7 +114,7 @@ case "$code" in
   *)   bad "GET $AI_BASE 返回 $code（期望 200）" ;;
 esac
 
-printf '\n[6/6] 数据库迁移与仓库一致\n'
+printf '\n[6/7] 数据库迁移与仓库一致\n'
 if [ -d "$REPO_DIR/server/prisma/migrations" ]; then
   # 只看退出码：0 = 没有待应用的迁移；非 0 = 有未应用的迁移，或库比当前代码新
   # （回滚之后就是后者，属于预期内的不一致，但必须让人看见）
@@ -124,6 +125,37 @@ if [ -d "$REPO_DIR/server/prisma/migrations" ]; then
   fi
 else
   note "没有 server/prisma/migrations 目录，跳过"
+fi
+
+printf '\n[7/7] 前端产物与引用一致\n'
+index="$WEB_ROOT/index.html"
+if [ ! -s "$index" ]; then
+  bad "$index 不存在或为空（前端没同步成功，看 deploy.sh 的 sync_web 输出）"
+else
+  # index.html 里引用的 /assets/... 必须都能落到真实文件：新 HTML 配旧 chunk（同步被中断，
+  # 或刚切换了前端版本）就是这个症状 —— 浏览器白屏，但服务端看起来一切正常。
+  refs="$(grep -oE '/assets/[A-Za-z0-9._@/-]+' "$index" | sort -u || true)"
+  if [ -z "$refs" ]; then
+    bad "index.html 里没有任何 /assets/... 引用：web 根里可能不是前端产物（例如是个默认页）"
+  else
+    missing=''
+    while IFS= read -r ref; do
+      [ -e "$WEB_ROOT$ref" ] || missing="$missing $ref"
+    done <<< "$refs"
+    if [ -z "$missing" ]; then
+      pass "index.html 引用的 $(printf '%s\n' "$refs" | wc -l | tr -d ' ') 个资源都存在"
+    else
+      bad "index.html 引用了不存在的资源:$missing（产物不完整，或同步被中断）"
+    fi
+  fi
+  # 挂载点说明线上现在跑的是哪版，是信息行，不计入通过/失败
+  if grep -q 'id="root"' "$index"; then
+    note "线上前端版本: React（#root）"
+  elif grep -q 'id="app"' "$index"; then
+    note "线上前端版本: Vue（#app）"
+  else
+    note "线上前端版本: 无法从 index.html 的挂载点判断"
+  fi
 fi
 
 if [ "${VERIFY_TRACKER:-0}" = "1" ]; then

@@ -5,8 +5,8 @@
 ## 文件
 
 - `ecosystem.config.js` — pm2 进程定义（`english-server` cluster 2 实例 + `english-ai` fork 1 实例，日志合并到 `/root/.pm2/logs`）
-- `deploy.sh` — 日常发布 `--deploy` / 回滚 `--rollback`
-- `verify.sh` — 发布后自检（6 项：端口、接口探针、CORS 白名单、非白名单回归、AI 应用就绪、迁移与仓库一致），只读、不改数据
+- `deploy.sh` — 日常发布 `--deploy`（用 `--web vue|react` 选择前端版本）、回滚 `--rollback`（代码 + 前端版本一起回退）、预演 `--print-plan`
+- `verify.sh` — 发布后自检（7 项：端口、接口探针、CORS 白名单、非白名单回归、AI 应用就绪、迁移与仓库一致、前端产物与引用一致），只读、不改数据
 - `bootstrap.sh` — 首次初始化 + 旧布局迁移，只跑一次（已迁移的机器上重跑会被前置检查拦下，并告知改用 `deploy.sh`）
 
 ## 目标拓扑
@@ -15,7 +15,7 @@
 flowchart LR
   Dev["本地开发<br/>G:/test/Nest/english"] -->|git push| GH["GitHub<br/>LJIAH/learning-english"]
   GH -->|git pull| Code["/www/wwwroot/english-code<br/>源码 + node_modules + dist"]
-  Code -->|pnpm build| Dist["apps/web/dist<br/>server/dist（含 apps/ai）"]
+  Code -->|pnpm build| Dist["所选前端 dist<br/>apps/web 或 apps/web-react<br/>server/dist（含 apps/ai）"]
   Dist -->|rsync -a --delete| WebRoot["/www/wwwroot/english.kevy.top<br/>仅静态产物"]
   Code -->|pm2 startOrReload| ProcServer["pm2: english-server x2<br/>:3000"]
   Code -->|pm2 startOrReload| ProcAi["pm2: english-ai x1<br/>:3001"]
@@ -70,8 +70,8 @@ bash /root/bootstrap.sh <仓库地址> --yes      # 确认后执行
 1. 前置检查：工具、旧配置 `WEB_ROOT/server/.env` 是否存在、代码目录是否已存在（如果发现是已迁移过的机器，这里就会直接拒绝并指向 `deploy.sh`）
 2. clone 仓库到 `/www/wwwroot/english-code`
 3. 把现网 `server/.env` 复制过去（`chmod 600`），密钥不重新生成
-4. `pnpm install --frozen-lockfile`、`prisma generate`、`prisma migrate deploy`，然后依次构建 tracker → web → server → ai
-5. 校验产物：后端入口文件存在、前端 bundle 里确实带上了站点地址（防止 `.env.production` 没生效却上线）
+4. `pnpm install --frozen-lockfile`、`prisma generate`、`prisma migrate deploy`，然后依次构建 tracker → 所选前端 → server → ai
+5. 校验产物：后端入口文件存在、所选前端（默认 `vue`，可用 `WEB_VARIANT=react` 换）的 bundle 里确实带上了站点地址（防止 `.env.production` 没生效却上线）
 6. 停掉旧 pm2 进程（原名 `main`），用 `deploy/ecosystem.config.js` 起新进程 `english-server` 和 `english-ai`，`pm2 save`
 7. 把 web 根里的非静态内容整体 `mv` 到 `/www/backup/english-pre-migration-<时间戳>`，再 rsync 前端产物过去
 8. 跑 `verify.sh` 自检，并打印剩余的人工步骤
@@ -94,17 +94,42 @@ bash deploy/verify.sh               # 只自检
 - 工作区必须干净（`git status --porcelain` 为空）才允许拉代码，否则拒绝执行；唯一例外是脚本自己的 `.deploy-state/`（已写进 `.gitignore`，且检查时会再过滤一次）
 - 只做 fast-forward（`merge --ff-only`），分叉就报错，不静默产生合并提交
 - 每次发布前把当前 commit 记到 `.deploy-state/previous-sha`，供回滚使用
-- 构建顺序固定 tracker → web → server → ai（web 依赖 `@en/tracker` 的 dist 产物；`server` 与 `ai` 是同一个 nest 项目下的两个应用，互不覆盖对方的 dist）
+- 构建顺序固定 tracker → 所选前端 → server → ai（前端依赖 `@en/tracker` 的 dist 产物；`server` 与 `ai` 是同一个 nest 项目下的两个应用，互不覆盖对方的 dist）
 - 迁移排在**产物校验之后、同步前端和重载之前**（`migrate_db`）：构建或校验失败时数据库和线上都没被动过；迁移失败立刻退出，此时前端还没同步，不会出现「新前端 + 旧后端」这种最难查的组合。没有新迁移时它是 no-op
 - `pm2 startOrReload` 不带 `--only`，`ecosystem.config.js` 里的所有进程（`english-server`、`english-ai`）由同一次发布统一接管，不存在需要手动启动的进程
 - `--rollback` 只回滚代码，**不回滚数据库**：`prisma migrate deploy` 只向前应用迁移，没有自动反向迁移。回滚前要确认那次发布没有带不可逆的 schema 变更；库与当前代码不一致时 `verify.sh` 的第 6 项会报出来
 - 同步前端用 `rsync -a --delete`，并排除 `.user.ini` / `.htaccess` / `.well-known/`，避免删掉宝塔和证书校验文件
 
+## 前端双版本切换（Vue / React）
+
+仓库里同时存在两个纯静态 SPA，而同一个 web 根同一时刻只能服务一份产物，所以发布时用 `--web` 选择「构建哪个、同步哪个」：
+
+- `vue` → 包 `@en/web`，产物 `apps/web/dist`，`index.html` 挂载点 `#app`
+- `react` → 包 `@en/web-react`，产物 `apps/web-react/dist`，挂载点 `#root`
+
+```bash
+bash deploy/deploy.sh --deploy              # 不带 --web：沿用线上当前版本（首次发布默认 vue）
+bash deploy/deploy.sh --deploy --web react  # 切到 React
+bash deploy/deploy.sh --deploy --web vue    # 切回 Vue
+WEB_VARIANT=react bash deploy/deploy.sh --deploy   # 等价的环境变量写法（--web 优先）
+bash deploy/deploy.sh --print-plan --web react     # 只打印解析结果，不触碰服务器
+```
+
+要点：
+
+- **变体与分支无关**：两个前端都在同一条分支上（`BRANCH`，默认 `master`），切换只换「构建哪个包、同步哪个 dist、校验哪个 index.html」，不动代码分支，也不涉及数据库迁移
+- 状态文件在代码目录的 `.deploy-state/`（已 gitignore）：`web-variant` 记录线上当前版本（rsync 成功后才写，也是不带 `--web` 时的默认来源）、`previous-web` 供回滚用、`previous-sha` 语义不变仍是发布前的 commit
+- `--rollback` 会同时回退代码和前端版本（回到 `previous-sha` + `previous-web`）；找不到 `previous-web` 时告警并沿用当前版本，可显式覆盖：`WEB_VARIANT=vue bash deploy/deploy.sh --rollback`
+- 发布前会断言所选前端的目录存在于当前提交（例如在没有 `apps/web-react` 的提交上发 react 会直接报错，而不是 rsync 一个空目录）；产物域名断言（`VITE_*` 是否注入）按所选变体的 `dist/assets` 生效
+- 确认线上当前是哪版：`bash deploy/verify.sh` 第 7 项会打印 `线上前端版本: Vue（#app）` / `React（#root）`
+- **切换瞬间有个极短窗口**：两版共用一个 web 根，`rsync --delete` 会先落新 `index.html`、再删旧 chunk，正在加载页面的用户刷新即恢复；同一时刻线上只会有一版
+- React 版的 3D 模型是构建产物（`apps/web-react/public/models/hologram/scene.opt.glb`，已入库）：`vite build` 把它拷进 `dist`，再随 rsync 上线，部署链路不需要特殊处理。`apps/web-react/models-src/` 只是本地跑 `models:optimize` 的输入，不入库也不参与构建——改了源模型忘了重跑优化，线上会静静继续用旧模型
+
 ## 发布后冒烟测试
 
 发布链路的验证分两层（互补，不能互相替代）：
 
-**① 服务端自检（自动，服务器上）**：`deploy.sh` 最后一步自动执行 `deploy/verify.sh`——6 项只读检查（端口、接口探针、CORS 白名单一致性、非白名单回归、AI 应用就绪、迁移与仓库一致）；`VERIFY_TRACKER=1 bash deploy/verify.sh` 还会把 tracker 的 UV → event 链路真实走一遍。覆盖「服务活着、接口通、配置一致」，**不覆盖浏览器里的 UI 行为**。
+**① 服务端自检（自动，服务器上）**：`deploy.sh` 最后一步自动执行 `deploy/verify.sh`——7 项只读检查（端口、接口探针、CORS 白名单一致性、非白名单回归、AI 应用就绪、迁移与仓库一致、前端产物与引用一致并报告线上前端版本）；`VERIFY_TRACKER=1 bash deploy/verify.sh` 还会把 tracker 的 UV → event 链路真实走一遍。覆盖「服务活着、接口通、配置一致」，**不覆盖浏览器里的 UI 行为**。
 
 **② 浏览器级关键路径冒烟（手动，本机）**：
 
@@ -191,7 +216,6 @@ curl -sI -H "Accept-Encoding: gzip" "https://english.kevy.top/<上一步的文�
 
 > 可选：想省掉 nginx 运行时压缩的 CPU，可在构建期生成预压缩文件（如 `vite-plugin-compression2` 产出 `.gz`）并开启 `gzip_static on;`。当前首屏 JS 约 336 KB，运行时压缩开销可忽略，先用上面的方案即可。
 
-
 ## AI 服务（english-ai）
 
 `server/apps/ai` 与 `server/apps/server` 是同一个 nest 项目（`server/nest-cli.json`）下的两个应用，分别监听 3001 / 3000，由 `ecosystem.config.js` 一起交给 pm2 管理，日常发布走同一个 `deploy.sh`。
@@ -211,6 +235,7 @@ curl -sI -H "Accept-Encoding: gzip" "https://english.kevy.top/<上一步的文�
 - **发布后接口 502 或 EADDRINUSE**：旧进程 `main` 还在占 3000。`pm2 describe main`，然后 `pm2 delete main && pm2 save`（`deploy.sh` 的前置检查也会拦这一种，并在报错里给出这条命令）。
 - **前端图片/头像/课程图/Socket 全挂**：`apps/web/.env.production` 没被加载，`VITE_*` 没内联进 bundle。`assert_artifacts` 会用「产物里必须出现站点域名」把这种情况判死（`grep -rl english.kevy.top apps/web/dist/assets` 可以人工复核）。
 - **AI 发布成功但跑的是旧代码**：`dist/apps/ai` 没被重建。现在 `assert_artifacts` 会断言 AI 入口存在，但构建日志里仍要看到「构建 @en/ai」这一行。
+- **切了前端版本但页面还是旧版**：先看 `bash deploy/verify.sh` 第 7 项报告的挂载点——它读的是 web 根里真实的 `index.html`。若挂载点已经变了但浏览器没变，是 `index.html` 被缓存（对应上面 nginx 建议里的 `location = /index.html` 不缓存）；若第 7 项报「引用了不存在的资源」，说明 `assets/` 里的 chunk 和 `index.html` 对不上，重新发布一次即可。
 - **error log 里的 `[CORS] 已拒绝来源: https://not-in-whitelist.example.com`**：`verify.sh` 第 4 项故意用非白名单来源探了一次，属于预期输出，不是故障。
 - **日志在哪**：应用用 `pm2 logs english-server` / `pm2 logs english-ai`，文件在 `/root/.pm2/logs/<名字>-{out,error}.log`；nginx 在 `/www/wwwlogs/english.kevy.top.log` 与 `.error.log`。old 进程留下的 `main-out.log` / `main-error.log` 已无人写入，可以直接删。
 
