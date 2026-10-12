@@ -10,6 +10,16 @@ import { refreshTokenApi } from "./auth";
 export const uploadUrl = import.meta.env.VITE_UPLOAD_URL ?? "";
 export const timeout = 50000;
 
+/**
+ * socket.io 服务端地址 —— 对应 Vue 版 apis/index.ts 的 socketUrl。
+ *
+ * **留空 = 连当前页面的 origin**（useSocket 里 `io(socketUrl || undefined)`）：
+ *   dev  → 由 vite.config 的 /socket.io 代理转发到 3000（同源，无 CORS）
+ *   prod → nginx 把 /socket.io/ 反代到 3000（同样同源）
+ * 所以两个环境都不需要配这一项；留着它只是为了本地特殊联调时能临时指向别处。
+ */
+export const socketUrl = import.meta.env.VITE_SOCKET_URL ?? "";
+
 export interface Response<T = unknown> {
   timestamp: string;
   path: string;

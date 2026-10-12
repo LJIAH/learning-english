@@ -4,9 +4,19 @@ import { Server, Socket } from "socket.io";
 @WebSocketGateway({
   cors: {
     // 复用与 HTTP 相同的来源白名单，未配置 CORS_ORIGIN 时默认放行本地开发端口
-    origin: (process.env.CORS_ORIGIN
-      ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim()).filter(Boolean)
-      : ["http://localhost:8080", "http://127.0.0.1:8080", "http://localhost:5173", "http://127.0.0.1:5173"]),
+    // 8080=Vue 版、8081=React 版（与 main.ts 的 getCorsOrigins 保持一致）
+    origin: process.env.CORS_ORIGIN
+      ? process.env.CORS_ORIGIN.split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [
+          "http://localhost:8080",
+          "http://127.0.0.1:8080",
+          "http://localhost:8081",
+          "http://127.0.0.1:8081",
+          "http://localhost:5173",
+          "http://127.0.0.1:5173",
+        ],
     credentials: true,
   },
 })
