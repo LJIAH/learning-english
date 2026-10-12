@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { RouterProvider } from "react-router-dom";
+import type { Tracker as TrackerInstance } from "@en/tracker";
 import Toaster from "@/components/Toaster";
 import { socketClient } from "@/apis/socket";
 import { useLogin } from "@/hooks/useLogin";
@@ -52,15 +53,67 @@ const requestIdle = (cb: () => void) => {
   }
 };
 
+/**
+ * 埋点实例与初始化守卫 —— 都放模块级。
+ *
+ * 埋点本身就是全局单例，放组件里会踩 React 开发期 StrictMode 的「挂载 → 卸载 →
+ * 再挂载」：effect 执行两次 → 初始化两个 Tracker 实例 → **uv / pv 各上报两遍**
+ * （实测确认）。用模块级守卫挡住，实例也放模块级，避免第二次挂载拿不到实例。
+ * 生产构建没有双挂载，但这样写两边都稳。
+ */
+let tracker: TrackerInstance | null = null;
+let trackerInitStarted = false;
+
+/**
+ * 埋点 SDK 初始化 —— 对应 Vue 版 App.vue 的 initTracker。
+ *
+ * 整包（含 fingerprintjs 指纹采集、ua-parser、web-vitals）延迟到浏览器空闲时
+ * 再动态加载并初始化：只是把这段开销从首屏渲染路径上挪开，
+ * UV / PV / 事件 / 错误 / Web Vitals 的上报能力不变。
+ *
+ * 用的是 同一个 import 说明符 `@en/tracker`，Vite 会把它打成独立 chunk
+ * （实测 gzip 28.7 kB），不进首屏包。
+ */
+const initTracker = async () => {
+  if (trackerInitStarted) return;
+  trackerInitStarted = true;
+  const { Tracker } = await import("@en/tracker");
+  tracker = new Tracker({
+    baseUrl: "/api/v1",
+    uv: {
+      api: "/tracker/uv",
+      updateApi: "/tracker/update-uv",
+    },
+    pv: {
+      api: "/tracker/pv",
+    },
+    event: {
+      api: "/tracker/event",
+    },
+    error: {
+      api: "/tracker/error",
+    },
+    performance: {
+      api: "/tracker/performance",
+    },
+  });
+  // 初始化完成时如果用户已登录，补一次用户绑定（UV → userId）
+  const userId = useUserStore.getState().user?.id;
+  if (userId) tracker.setUserId(userId);
+};
+
 export default function App() {
   const isShowLogin = useLogin((s) => s.isShowLogin);
   const isShowSearch = useSearch((s) => s.isShowSearch);
   const user = useUserStore((s) => s.user);
 
   useEffect(() => {
-    const run = () => requestIdle(prefetchLazyRoutes);
+    const run = () => {
+      requestIdle(prefetchLazyRoutes);
+      requestIdle(() => void initTracker());
+    };
 
-    // 等首屏关键资源加载完再预取，避免与首屏抢带宽
+    // 等首屏关键资源加载完再预取/初始化，避免与首屏抢带宽
     if (document.readyState === "complete") {
       run();
       return;
@@ -70,8 +123,8 @@ export default function App() {
   }, []);
 
   /**
-   * socket 连接跟随登录态 —— 对应 Vue 版 App.vue 里
-   * `watch(() => userStore.user?.id)` 的同一套逻辑。
+   * 登录态变化 —— 对应 Vue 版 App.vue 里 `watch(() => userStore.user?.id)`：
+   * 绑定埋点用户 + 建立/断开 socket 连接。
    *
    * 登录后 connect、登出时 disconnect；后端按 query.userId 把连接
    * join 进 user_<id> 房间，支付成功等推送才有入口。
@@ -82,8 +135,12 @@ export default function App() {
     let disposed = false;
     void (async () => {
       if (disposed) return;
-      if (user?.id) await socketClient.connect();
-      else socketClient.disconnect();
+      if (user?.id) {
+        tracker?.setUserId(user.id);
+        await socketClient.connect();
+      } else {
+        socketClient.disconnect();
+      }
     })();
     return () => {
       disposed = true;
