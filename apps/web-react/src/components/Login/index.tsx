@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import { useLogin } from "@/hooks/useLogin";
 import LoginForm from "./LoginForm";
@@ -28,14 +28,8 @@ export default function Login() {
   const closeLogin = useLogin((s) => s.closeLogin);
   const [type, setType] = useState<LoginType>("login");
 
-  // ESC 关闭（对应 Vue 版 useLogin 里的 keydown 监听）
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeLogin();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closeLogin]);
+  // ESC 关闭不在这里监听：由 useLogin 状态层在打开弹窗时统一注册
+  // （组件挂载晚于弹窗可见，注册在组件内会留下「可见但 Esc 无效」的窗口）
 
   return (
     <>
