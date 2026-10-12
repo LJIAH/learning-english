@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { SendHorizontal } from "lucide-react";
+import { Mic, SendHorizontal } from "lucide-react";
 import MessageItem from "./MessageItem";
 import { useAvatar } from "@/hooks/useAvatar";
+import { useVoiceToText, useVoiceToTextStore } from "@/hooks/useVoiceToText";
 import type { ChatDisplayList } from "../types";
 import "@/assets/css/deep-seek.css";
 
@@ -22,10 +23,39 @@ const SCROLL_THROTTLE_MS = 100;
 /** 对应 Vue 版 Chat/components/Bubble.vue */
 export default function Bubble({ list, onSendMessage }: BubbleProps) {
   const { avatar } = useAvatar();
+  const { isListening, error, start, stop, reset } = useVoiceToText();
   const [message, setMessage] = useState("");
   const [deepThink, setDeepThink] = useState(false);
   const [webSearch, setWebSearch] = useState(false);
   const [isSending, setIsSending] = useState(false);
+
+  /**
+   * 语音识别结果实时同步到输入框（对应 Vue 的 watch([finalText, interimText])）。
+   *
+   * 用 store 订阅而不是 useEffect 依赖：回调由识别器在 React 之外触发，
+   * 属于「订阅外部数据源」的正当用法；写成 effect 里同步 setState 会触发
+   * react-hooks/set-state-in-effect（级联渲染）告警。
+   */
+  useEffect(
+    () =>
+      useVoiceToTextStore.subscribe((state, prev) => {
+        if (
+          state.finalText !== prev.finalText ||
+          state.interimText !== prev.interimText
+        ) {
+          setMessage(state.finalText + state.interimText);
+        }
+      }),
+    [],
+  );
+
+  const toggleVoice = () => {
+    if (isListening) {
+      stop();
+    } else {
+      start();
+    }
+  };
 
   const scrollContainer = useRef<HTMLDivElement>(null);
   const scrollLockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -81,6 +111,8 @@ export default function Bubble({ list, onSendMessage }: BubbleProps) {
     setIsSending(true);
     onSendMessage(message, deepThink, webSearch);
     setMessage("");
+    // 清空语音累积文本，否则下次收音会把上一轮的转写又拼回输入框
+    reset();
     // 延迟解锁，防止短时间内重复发送
     setTimeout(() => setIsSending(false), 1000);
   };
@@ -120,9 +152,33 @@ export default function Bubble({ list, onSendMessage }: BubbleProps) {
             <span>🌐</span>
             <span>联网搜索</span>
           </div>
-          {/* TODO: 语音输入（Vue 版是 hooks/useVoiceToText.ts，187 行，
-              依赖 Web Speech API 与权限流程，单独迁移） */}
+          {/* 语音输入：替代 Vue 版的 el-button（circle + Microphone 图标） */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={toggleVoice}
+              title="语音输入"
+              aria-label={isListening ? "停止语音输入" : "开始语音输入"}
+              aria-pressed={isListening}
+              className={`grid size-8 cursor-pointer place-items-center rounded-full border transition-colors ${
+                isListening
+                  ? "border-red-500 bg-red-500 text-white"
+                  : "border-gray-300 bg-white text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              <Mic size={16} />
+            </button>
+            {/* 收音时脉冲动画 */}
+            {isListening && (
+              <span className="absolute -top-0.5 -right-0.5 flex size-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex size-2.5 rounded-full bg-red-500" />
+              </span>
+            )}
+          </div>
         </div>
+
+        {error && <div className="text-xs text-red-500">{error}</div>}
 
         <div className="flex items-center gap-2">
           <textarea
