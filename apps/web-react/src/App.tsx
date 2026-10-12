@@ -3,6 +3,7 @@ import { RouterProvider } from "react-router-dom";
 import Toaster from "@/components/Toaster";
 import { socketClient } from "@/apis/socket";
 import { useLogin } from "@/hooks/useLogin";
+import { useSearch } from "@/hooks/useSearch";
 import { useUserStore } from "@/stores/user";
 import { router } from "./router";
 
@@ -14,9 +15,16 @@ import { router } from "./router";
 const Login = lazy(() => import("@/components/Login"));
 
 /**
- * 预取懒加载页面（Setting、Chat、WordBook）与登录弹窗。
+ * 全局搜索弹窗：同样懒加载 + 条件挂载（对应 Vue 版的 `<Search v-if="isShowSearch" />`）。
+ * 它依赖 axios 与词库接口，不进首屏包；快捷键在 hooks/useSearch 里注册，
+ * 组件挂载与否不影响按 Ctrl + F 唤起。
+ */
+const Search = lazy(() => import("@/components/Search"));
+
+/**
+ * 预取懒加载页面（Setting、Chat、WordBook）与登录弹窗、搜索弹窗。
  *
- * 关键点：这里与 router / Login 里用的是**同一个 import 说明符**，
+ * 关键点：这里与 router / Login / Search 里用的是**同一个 import 说明符**，
  * Vite 解析为同一个模块、产出同一个 chunk —— 所以预取的就是用户
  * 点进去要用的那份代码，而不是另一份重复产物。
  *
@@ -27,6 +35,7 @@ const prefetchLazyRoutes = () => {
   void import("@/views/Chat");
   void import("@/views/WordBook");
   void import("@/components/Login");
+  void import("@/components/Search");
 };
 
 const requestIdle = (cb: () => void) => {
@@ -45,6 +54,7 @@ const requestIdle = (cb: () => void) => {
 
 export default function App() {
   const isShowLogin = useLogin((s) => s.isShowLogin);
+  const isShowSearch = useSearch((s) => s.isShowSearch);
   const user = useUserStore((s) => s.user);
 
   useEffect(() => {
@@ -83,6 +93,11 @@ export default function App() {
   return (
     <>
       <RouterProvider router={router} />
+      {isShowSearch && (
+        <Suspense fallback={null}>
+          <Search />
+        </Suspense>
+      )}
       {isShowLogin && (
         <Suspense fallback={null}>
           <Login />
