@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   BookMarked,
@@ -28,7 +29,8 @@ type NavItem = {
  *
  * 两处 Element Plus 替换：
  *   el-icon      → 直接用 lucide-react 图标组件（无需容器包装）
- *   el-popover   → 自实现（点击切换 + 点击外部关闭），见 useClickOutside
+ *   el-popover   → 自实现（**悬停展开 + 延迟收起 + 点击外部关闭**）
+ *                  el-popover 默认 trigger 是 hover，故不能做成点击切换
  *   ElMessage    → 极简 toast（stores/toast），见 @/components/Toaster
  */
 const navItems: NavItem[] = [
@@ -47,17 +49,80 @@ export default function Header() {
   const user = useUserStore((s) => s.user);
 
   const [showProfile, setShowProfile] = useState(false);
-  const profileRef = useRef<HTMLDivElement>(null);
+  /** 卡片的 fixed 定位（相对视口）：卡片被 portal 到 body，不再靠 CSS 相对定位 */
+  const [cardPos, setCardPos] = useState<{ top: number; right: number } | null>(
+    null,
+  );
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 点击外部关闭资料卡
+  /**
+   * 资料卡触发方式：悬停。
+   *
+   * Vue 版是 `<el-popover :width="340">` 且**没写 trigger** —— Element Plus 的
+   * el-popover 默认 trigger 就是 hover。最初移植成「点击切换」属于行为回归。
+   *
+   * ★ 卡片必须 portal 到 body，不能渲染在原地：header 内层是 overflow-x-auto
+   * （overflow-x 非 visible 时 overflow-y 会计算成 auto），会把悬挂在 header
+   * 下方的卡片整个裁掉 —— 表现为「卡片渲染了但看不见、鼠标位置下是页面元素」。
+   * Vue 版没这问题，正是因为 el-popover 默认 teleport 到 body。
+   */
+  const updateCardPos = () => {
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (!r) return;
+    // 对齐 Vue 版的 absolute right-0 top-full mt-2
+    setCardPos({ top: r.bottom + 8, right: window.innerWidth - r.right });
+  };
+
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+
+  const openProfile = () => {
+    cancelClose();
+    updateCardPos();
+    setShowProfile(true);
+  };
+
+  /**
+   * 延迟关闭：卡片 portal 到 body 后，鼠标从头像移向卡片必然离开触发器的
+   * DOM 子树（两者之间还有 8px 间隙），所以必须留一个短延迟，
+   * 并由卡片自身的 mouseenter 取消掉它。
+   */
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => {
+      setShowProfile(false);
+      closeTimer.current = null;
+    }, 180);
+  };
+
+  useEffect(() => () => cancelClose(), []);
+
+  // 打开期间跟随滚动/缩放重算位置；点击卡片与触发器之外关闭
   useEffect(() => {
     if (!showProfile) return;
+
     const onPointerDown = (e: MouseEvent) => {
-      if (!profileRef.current?.contains(e.target as Node))
+      const t = e.target as Node;
+      if (!triggerRef.current?.contains(t) && !cardRef.current?.contains(t)) {
         setShowProfile(false);
+      }
     };
+    const onReflow = () => updateCardPos();
+
     document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
+    window.addEventListener("scroll", onReflow, true);
+    window.addEventListener("resize", onReflow);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("scroll", onReflow, true);
+      window.removeEventListener("resize", onReflow);
+    };
   }, [showProfile]);
 
   const isActive = (path: string) =>
@@ -112,9 +177,16 @@ export default function Header() {
           <span className="font-bold text-sm">{user?.dayNumber ?? 0}</span>
         </div>
 
-        <div className="relative shrink-0" ref={profileRef}>
+        <div
+          className="relative shrink-0"
+          ref={triggerRef}
+          onMouseEnter={openProfile}
+          onMouseLeave={scheduleClose}
+        >
           <div
-            onClick={() => setShowProfile((v) => !v)}
+            // 点击也打开（不做 toggle）：触屏/无鼠标场景下 hover 不可用；
+            // 若用 toggle，悬停展开后随手点一下头像反而会把卡片关掉
+            onClick={openProfile}
             className="flex items-center gap-2 border-l cursor-pointer border-gray-200 pl-4"
           >
             <img
@@ -128,11 +200,20 @@ export default function Header() {
             <span className="text-sm font-bold">{user?.name ?? "游客"}</span>
           </div>
 
-          {showProfile && (
-            <div className="absolute right-0 top-full z-20 mt-2">
-              <Profile onClose={() => setShowProfile(false)} />
-            </div>
-          )}
+          {showProfile &&
+            cardPos &&
+            createPortal(
+              <div
+                ref={cardRef}
+                className="fixed z-30"
+                style={{ top: cardPos.top, right: cardPos.right }}
+                onMouseEnter={cancelClose}
+                onMouseLeave={scheduleClose}
+              >
+                <Profile onClose={() => setShowProfile(false)} />
+              </div>,
+              document.body,
+            )}
         </div>
       </div>
     </header>

@@ -5,6 +5,7 @@ import globals from "globals";
 import pluginVue from "eslint-plugin-vue";
 import reactHooks from "eslint-plugin-react-hooks";
 import prettier from "eslint-config-prettier/flat";
+import { defineConfig, globalIgnores } from "eslint/config";
 
 /**
  * Monorepo 根级 ESLint（flat config）。
@@ -18,17 +19,15 @@ import prettier from "eslint-config-prettier/flat";
  *   - prettier 必须放最后：关闭所有与 Prettier 冲突的格式化规则，
  *     避免 lint-staged 里 eslint --fix 与 prettier --write 互相拉扯
  */
-export default tseslint.config(
-  {
-    ignores: [
-      "**/dist/**",
-      "**/node_modules/**",
-      "**/*.d.ts",
-      "**/playwright-report/**",
-      "**/test-results/**",
-      "server/**",
-    ],
-  },
+export default defineConfig(
+  globalIgnores([
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/*.d.ts",
+    "**/playwright-report/**",
+    "**/test-results/**",
+    "server/**",
+  ]),
 
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -68,7 +67,9 @@ export default tseslint.config(
   // ---- React（apps/web-react）----
   {
     files: ["apps/web-react/**/*.{ts,tsx}"],
-    plugins: { "react-hooks": reactHooks },
+    // 类型断言：eslint-plugin-react-hooks 仍按旧版 Rule.RuleModule 声明规则，
+    // 与 ESLint 核心（@eslint/core）的 Plugin 类型尚未对齐；运行时行为不变
+    plugins: { "react-hooks": /** @type {any} */ (reactHooks) },
     rules: {
       ...reactHooks.configs.recommended.rules,
       // 新版严格规则：useEffect 内直接 setState 需重构才能消除，
