@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
-    "size-report": "node scripts/size-report.mjs",
+    "size-report": "size-report",
     "test:e2e": "playwright test",
     "test:e2e:prod": "cross-env E2E_PROD=1 playwright test",
     "test:e2e:report": "playwright show-report"
@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@en/size-report": "workspace:*",
     "@tsconfig/node24": "^24.0.4",
     "@types/dom-speech-recognition": "^0.0.12",
     "@types/md5": "^2.3.6",

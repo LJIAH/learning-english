@@ -1,0 +1,13 @@
+{
+  "name": "@en/size-report",
+  "version": "1.0.0",
+  "private": true,
+  "description": "前端产物体积报告（零依赖，Vue / React 共用）",
+  "type": "module",
+  "bin": {
+    "size-report": "./index.mjs"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}

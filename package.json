@@ -17,6 +17,7 @@
     "test:e2e:report": "pnpm --filter @en/web test:e2e:report",
     "lint": "eslint .",
     "type-check": "pnpm -r --if-present run type-check",
+    "size-report": "pnpm -r --if-present run size-report",
     "prepare": "husky"
   },
   "devDependencies": {
