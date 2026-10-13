@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { useThreeScene } from "@/hooks/useThreeScene";
+import HologramFallback from "./HologramFallback";
 
 /** 优化后的模型：4.84MB → 0.49MB（9.8x）。生成方式见 scripts/optimize-models.mjs */
 const MODEL_URL = "/models/hologram/scene.opt.glb";
@@ -42,6 +43,17 @@ export default function Hologram() {
   const radiusRef = useRef(0);
   /** 模型垂直半高 */
   const halfHeightRef = useRef(0);
+
+  /**
+   * 模型是否已就绪（GLB 下载 + 解析 + 相机适配完成）。
+   *
+   * 拆成两个状态是为了「先淡出、再卸载」：`loaded` 置 true 只触发占位层的
+   * opacity 过渡，过渡结束（onTransitionEnd）才把占位从 DOM 摘掉。
+   * 若只用一个状态直接条件渲染，占位会瞬间消失、而模型此刻才刚渲染出来，
+   * 中间会闪一下深色底。
+   */
+  const [loaded, setLoaded] = useState(false);
+  const [placeholderGone, setPlaceholderGone] = useState(false);
 
   const { getScene, getCamera } = useThreeScene(containerRef, canvasRef, {
     /**
@@ -135,6 +147,8 @@ export default function Hologram() {
         });
       }
       fitCamera();
+      // 首帧就绪 → 触发占位层淡出（见下方 render）
+      setLoaded(true);
     });
 
     // 画布尺寸变化（窗口缩放 / 窄屏换行导致右列变矮）后重新适配相机
@@ -156,8 +170,47 @@ export default function Hologram() {
     // h-full：跟随右列高度（父级 flex item 有确定高度）
     // min-h-75：窄屏下右列换行时父级高度不再确定，h-full 会算成 0
     //           —— 用最小高度兜底，避免画布被压成 0
-    <div ref={containerRef} className="w-full h-full min-h-75 min-w-75">
-      <canvas ref={canvasRef} className="block w-full h-full" />
+    // relative：占位层需要绝对定位盖在画布之上
+    <div
+      ref={containerRef}
+      className="relative w-full h-full min-h-75 min-w-75"
+    >
+      {/*
+        canvas 用 absolute，不是为了省事，是为了消除 0.56px 抖动：
+
+        普通流内时，canvas 是**替换元素**，会把内建宽高比（缓冲区 689×440）带进布局
+        —— 容器 h-full 在「内容撑高 ↔ 高度决定内容」之间循环，浏览器退回按内容算，
+        于是容器（进而是 hero）被撑到 440.56；而占位层没有内建比例、高度正好 440。
+        两者差 0.56px ⇒ 切换瞬间下方内容会微移。
+
+        改成 absolute 后画布脱离文档流，容器高度只由 flex 决定（h-full → 440），
+        实测占位态与终态都是 440.00。
+
+        ★ w-full h-full 不能省：绝对定位的替换元素在 width:auto 时会退回**内建宽度**
+          （689，比容器 689.89 窄 0.89px 且不居中）。显式给百分比才会精确铺满。
+      */}
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 block w-full h-full"
+      />
+
+      {/*
+        模型就绪前的占位层：盖在画布之上（DOM 顺序在后 + absolute）。
+        就绪后先淡出、过渡结束再卸载 —— 避免「占位消失」与「模型出现」之间闪底色。
+        loaded 后补 pointer-events-none：淡出过程中不该继续拦住 OrbitControls 的拖拽。
+      */}
+      {!placeholderGone && (
+        <div
+          className={`absolute inset-0 transition-opacity duration-500 ease-out ${
+            loaded ? "pointer-events-none opacity-0" : "opacity-100"
+          }`}
+          onTransitionEnd={() => {
+            if (loaded) setPlaceholderGone(true);
+          }}
+        >
+          <HologramFallback />
+        </div>
+      )}
     </div>
   );
 }

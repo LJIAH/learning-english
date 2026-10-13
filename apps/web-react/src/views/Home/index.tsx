@@ -1,7 +1,20 @@
-import { Fragment, useEffect, useRef } from "react";
+import { Fragment, Suspense, lazy, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import Hologram from "./components/Hologram";
+import HologramFallback from "./components/HologramFallback";
 import { useLogin } from "@/hooks/useLogin";
+
+/**
+ * 首屏 3D 全息模型改为**懒加载**。
+ *
+ * 原先 Hologram 是同步 import，three.js（含 GLTFLoader / Meshopt 解码器）整包
+ * 被拖进首屏主包 —— 主包 301KB(gzip) 里绝大部分是它。改成 lazy 后 three.js
+ * 被拆成独立 chunk，首屏渲染完才按需下载，主包回落到 ~105KB(gzip) 量级。
+ *
+ * 代价是首屏 3D 会「先占位、后出现」。这一段用 <Suspense> 的 fallback 兜住，
+ * 尺寸与画布容器完全一致（CLS = 0）；**第二段等待（0.49MB 的 GLB 模型）
+ * 由 Hologram 内部的占位层负责**，两段无缝衔接，用户只看到一次加载态。
+ */
+const Hologram = lazy(() => import("./components/Hologram"));
 
 const STATS = [
   { target: 1000000, suffix: "+", label: "累计学员" },
@@ -191,7 +204,10 @@ export default function Home() {
           </div>
         </div>
         <div className="relative z-8 flex-1 -my-9 -mr-9">
-          <Hologram />
+          {/* fallback 与画布容器同尺寸 → 占位→模型不产生布局位移 */}
+          <Suspense fallback={<HologramFallback />}>
+            <Hologram />
+          </Suspense>
         </div>
       </div>
 
