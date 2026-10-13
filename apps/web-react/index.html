@@ -4,7 +4,12 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>English App · React</title>
+    <meta
+      name="description"
+      content="AI 英语学习平台：跟 AI 对话练口语、课程购买、单词学习闭环与每日学习报告推送。"
+    />
+    <!-- 站点名走 env 替换：见 .env.development / .env.production 的 VITE_APP_TITLE -->
+    <title>%VITE_APP_TITLE%</title>
     <style>
       /* 首屏骨架：与 Vue 版同一套尺寸与配色，保证两版切换时视觉连续。
          内联在此（约 1KB，不产生额外请求），React 挂载时 #root 内容被替换 */
